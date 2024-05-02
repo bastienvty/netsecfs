@@ -38,12 +38,12 @@ func (r *HelloRoot) Getattr(ctx context.Context, fh fs.FileHandle, out *fuse.Att
 var _ = (fs.NodeGetattrer)((*HelloRoot)(nil))
 var _ = (fs.NodeOnAdder)((*HelloRoot)(nil))
 
-func mount(mountDir string, debug bool) {
+func mount(mountDir string, debug bool) *fuse.Server {
 	opts := &fs.Options{}
 	opts.Debug = debug
 	server, err := fs.Mount(mountDir, &HelloRoot{}, opts)
 	if err != nil {
 		log.Fatalf("Mount fail: %v\n", err)
 	}
-	server.Wait()
+	return server
 }

@@ -18,7 +18,8 @@ var ServerCmd = &cobra.Command{
 			fmt.Println("Error while parsing the debug flag.")
 			return
 		}
-		mount(args[0], debug)
+		server := mount(args[0], debug)
+		server.Wait()
 	},
 }
 
