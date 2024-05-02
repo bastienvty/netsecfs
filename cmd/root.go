@@ -19,7 +19,16 @@ var rootCmd = &cobra.Command{
 that encrypts and decrypts files based on a password.`,
 	// Uncomment the following line if your bare application
 	// has an action associated with it:
-	// Run: func(cmd *cobra.Command, args []string) { },
+	Run: func(cmd *cobra.Command, args []string) {
+		version, err := cmd.Flags().GetBool("version")
+		if err != nil {
+			os.Exit(1)
+		}
+		if version {
+			println("netsecfs v0.1")
+			return
+		}
+	},
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
@@ -32,15 +41,8 @@ func Execute() {
 }
 
 func init() {
-	// Here you will define your flags and configuration settings.
-	// Cobra supports persistent flags, which, if defined here,
-	// will be global for your application.
+	rootCmd.Flags().BoolP("version", "v", false, "Print the version number of netsecfs")
 
-	// rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.netsecfs.yaml)")
-
-	// Cobra also supports local flags, which will only run
-	// when this action is called directly.
-	rootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
 	rootCmd.AddCommand(server.ServerCmd)
 	rootCmd.AddCommand(client.ClientCmd)
 }
