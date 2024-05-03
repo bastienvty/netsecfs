@@ -8,7 +8,6 @@ package server
 
 import (
 	"context"
-	"log"
 	"syscall"
 
 	"github.com/hanwen/go-fuse/v2/fs"
@@ -38,7 +37,7 @@ func (r *HelloRoot) Getattr(ctx context.Context, fh fs.FileHandle, out *fuse.Att
 var _ = (fs.NodeGetattrer)((*HelloRoot)(nil))
 var _ = (fs.NodeOnAdder)((*HelloRoot)(nil))
 
-func mount(mountDir string, debug bool) *fuse.Server {
+/*func mount(mountDir string, debug bool) *fuse.Server {
 	opts := &fs.Options{}
 	opts.Debug = debug
 	server, err := fs.Mount(mountDir, &HelloRoot{}, opts)
@@ -46,4 +45,4 @@ func mount(mountDir string, debug bool) *fuse.Server {
 		log.Fatalf("Mount fail: %v\n", err)
 	}
 	return server
-}
+}*/
