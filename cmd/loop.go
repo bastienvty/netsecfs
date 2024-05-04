@@ -257,7 +257,7 @@ func (hn *HelloNode) Open(ctx context.Context, mode uint32) (fh fs.FileHandle, f
 	return rf, 0, 0
 }
 
-func mount(mountPoint string) *fuse.Server {
+func mountLoop(mountPoint string) *fuse.Server {
 	// virtualRootPath is the root of our virtual structure.
 	virtualRootPath := "/"
 
