@@ -4,7 +4,7 @@
 
 // This program is the analogon of libfuse's hello.c, a a program that
 // exposes a single file "file.txt" in the root directory.
-package server
+package cmd
 
 import (
 	"context"

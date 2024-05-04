@@ -6,8 +6,6 @@ package cmd
 import (
 	"os"
 
-	"github.com/bastienvty/netsecfs/cmd/client"
-	"github.com/bastienvty/netsecfs/cmd/server"
 	"github.com/spf13/cobra"
 )
 
@@ -43,6 +41,6 @@ func Execute() {
 func init() {
 	rootCmd.Flags().BoolP("version", "v", false, "Print the version number of netsecfs")
 
-	rootCmd.AddCommand(server.ServerCmd)
-	rootCmd.AddCommand(client.ClientCmd)
+	rootCmd.AddCommand(initCmd)
+	rootCmd.AddCommand(mountCmd)
 }

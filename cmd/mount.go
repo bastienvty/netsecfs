@@ -1,4 +1,4 @@
-package server
+package cmd
 
 import (
 	"fmt"
@@ -7,11 +7,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// serverCmd represents the server command
-var ServerCmd = &cobra.Command{
-	Use:   "server [mountDir]",
-	Short: "Start the server",
-	Long:  `Start the server that will mount handle the filesystem requests.`,
+var mountCmd = &cobra.Command{
+	Use:   "mount",
+	Short: "Mount the filesystem",
+	Long:  `Mount the filesystem to the specified directory.`,
 	Args:  cobra.MinimumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		/*debug, err := cmd.Flags().GetBool("debug")
@@ -36,5 +35,5 @@ var ServerCmd = &cobra.Command{
 }
 
 func init() {
-	ServerCmd.Flags().BoolP("debug", "d", false, "Enable debug mode")
+	mountCmd.Flags().BoolP("debug", "d", false, "Enable debug mode")
 }
