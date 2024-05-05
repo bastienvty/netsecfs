@@ -39,9 +39,10 @@ func mount(cmd *cobra.Command, args []string) {
 		EntryTimeout:    &sec,
 	}
 	fuseOpts.MountOptions = fuse.MountOptions{
-		AllowOther: true,
-		Debug:      true,
+		Options: []string{"rw", "default_permissions"},
+		Debug:   true,
 	}
+	//fuseOpts.MountOptions.Options = append(fuseOpts.MountOptions.Options, "rw")
 	server, err := fs.Mount(args[0], &RootNode{}, fuseOpts)
 	if err != nil {
 		fmt.Println("Mount fail: ", err)
