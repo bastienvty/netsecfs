@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"syscall"
 	"time"
 
 	"github.com/hanwen/go-fuse/v2/fs"
@@ -49,6 +50,7 @@ func mount(cmd *cobra.Command, args []string) {
 		return
 	}
 	fmt.Println("Unmount to stop the server.")
+	syscall.Umask(0000)
 	server.Wait()
 }
 
