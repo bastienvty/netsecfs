@@ -1,11 +1,15 @@
 package db
 
 import (
+	"context"
 	"fmt"
 	"runtime"
+	"syscall"
 	"time"
 
 	"github.com/bastienvty/netsecfs/utils"
+	"github.com/hanwen/go-fuse/v2/fs"
+	"github.com/hanwen/go-fuse/v2/fuse"
 	_ "github.com/mattn/go-sqlite3"
 	"xorm.io/xorm"
 	"xorm.io/xorm/names"
@@ -44,6 +48,7 @@ type Meta interface {
 	Name() string
 	Init() error
 	Shutdown() error
+	GetAttr(ctx context.Context, f fs.FileHandle, out *fuse.AttrOut) (ch *fs.Inode, errno syscall.Errno)
 }
 
 type dbMeta struct {
@@ -64,6 +69,41 @@ func (m *dbMeta) Init() error {
 
 func (m *dbMeta) Shutdown() error {
 	return m.db.Close()
+}
+
+/*func (m *dbMeta) parseAttr(buf []byte, attr *fuse.Attr) {
+	if attr == nil || len(buf) == 0 {
+		return
+	}
+	rb := utils.FromBuffer(buf)
+	attr.Flags = rb.Get8()
+	attr.Mode = rb.Get16()
+	attr.Typ = uint8(attr.Mode >> 12)
+	attr.Mode &= 0xfff
+	attr.Uid = rb.Get32()
+	attr.Gid = rb.Get32()
+	attr.Atime = int64(rb.Get64())
+	attr.Atimensec = rb.Get32()
+	attr.Mtime = int64(rb.Get64())
+	attr.Mtimensec = rb.Get32()
+	attr.Ctime = int64(rb.Get64())
+	attr.Ctimensec = rb.Get32()
+	attr.Nlink = rb.Get32()
+	attr.Length = rb.Get64()
+	attr.Rdev = rb.Get32()
+	if rb.Left() >= 8 {
+		attr.Parent = Ino(rb.Get64())
+	}
+	attr.Full = true
+	if rb.Left() >= 8 {
+		attr.AccessACL = rb.Get32()
+		attr.DefaultACL = rb.Get32()
+	}
+	logger.Tracef("attr: %+v -> %+v", buf, attr)
+}*/
+
+func (m *dbMeta) GetAttr(ctx context.Context, f fs.FileHandle, out *fuse.AttrOut) (ch *fs.Inode, errno syscall.Errno) {
+	return nil, syscall.ENOSYS
 }
 
 func newSQLMeta(driver, addr string) (Meta, error) {
