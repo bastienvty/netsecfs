@@ -3,6 +3,8 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/bastienvty/netsecfs/internal/fs"
@@ -35,21 +37,29 @@ func mount(cmd *cobra.Command, args []string) {
 		NegativeTimeout: &sec,
 		AttrTimeout:     &sec,
 		EntryTimeout:    &sec,
-		UID:             uint32(os.Getuid()),
-		GID:             uint32(os.Getgid()),
+		//UID:             uint32(os.Getuid()),
+		//GID:             uint32(os.Getgid()),
 	}
 	fuseOpts.MountOptions = fuse.MountOptions{
 		Options: []string{"rw", "default_permissions"},
-		//Debug:   true,
+		Debug:   true,
 	}
 	//fuseOpts.MountOptions.Options = append(fuseOpts.MountOptions.Options, "rw")
-	server, err := gofs.Mount(args[0], &fs.MyNode{}, fuseOpts)
+	server, err := gofs.Mount(args[0], &fs.NetSNode{}, fuseOpts)
 	if err != nil {
 		fmt.Println("Mount fail: ", err)
 		return
 	}
-	fmt.Println("Unmount to stop the server.")
+	fmt.Println("Unmount or Ctrl+C to stop the server.")
+	c := make(chan os.Signal)
+	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		<-c
+		server.Unmount()
+	}()
+
 	server.Wait()
+	fmt.Println("Server exited.")
 	//go server.Serve()
 }
 
