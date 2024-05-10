@@ -37,7 +37,8 @@ func (n *NetSNode) isRoot() bool {
 var _ = (fs.InodeEmbedder)((*NetSNode)(nil))
 
 var _ = (fs.NodeLookuper)((*NetSNode)(nil))
-var _ = (fs.NodeGetattrer)((*NetSNode)(nil))
+
+/*var _ = (fs.NodeGetattrer)((*NetSNode)(nil))
 var _ = (fs.NodeStatfser)((*NetSNode)(nil))
 
 // var _ = (fs.NodeOpener)((*NetSNode)(nil))
@@ -51,7 +52,7 @@ var _ = (fs.NodeMkdirer)((*NetSNode)(nil))
 var _ = (fs.NodeRmdirer)((*NetSNode)(nil))
 
 var _ = (fs.NodeUnlinker)((*NetSNode)(nil)) // vim
-var _ = (fs.NodeFsyncer)((*NetSNode)(nil))  // vim
+var _ = (fs.NodeFsyncer)((*NetSNode)(nil))  // vim*/
 
 func (n *NetSNode) Lookup(ctx context.Context, name string, out *fuse.EntryOut) (*fs.Inode, syscall.Errno) {
 	ops := NetSNode{}
@@ -61,7 +62,7 @@ func (n *NetSNode) Lookup(ctx context.Context, name string, out *fuse.EntryOut) 
 	return n.NewInode(ctx, &ops, fs.StableAttr{Mode: syscall.S_IFREG}), 0
 }
 
-func (n *NetSNode) Getattr(ctx context.Context, f fs.FileHandle, out *fuse.AttrOut) (errno syscall.Errno) {
+/*func (n *NetSNode) Getattr(ctx context.Context, f fs.FileHandle, out *fuse.AttrOut) (errno syscall.Errno) {
 	if f != nil {
 		return f.(fs.FileGetattrer).Getattr(ctx, out)
 	}
@@ -76,13 +77,13 @@ func (n *NetSNode) Statfs(ctx context.Context, out *fuse.StatfsOut) syscall.Errn
 
 func (n *NetSNode) Access(ctx context.Context, mask uint32) syscall.Errno {
 	return 0
-}
+}*/
 
 /*func (n *NetSNode) Open(ctx context.Context, flags uint32) (fh fs.FileHandle, fuseFlags uint32, errno syscall.Errno) {
 	return nil, 0, 0
 }*/
 
-func (n *NetSNode) Create(ctx context.Context, name string, flags uint32, mode uint32, out *fuse.EntryOut) (node *fs.Inode, fh fs.FileHandle, fuseFlags uint32, errno syscall.Errno) {
+/*func (n *NetSNode) Create(ctx context.Context, name string, flags uint32, mode uint32, out *fuse.EntryOut) (node *fs.Inode, fh fs.FileHandle, fuseFlags uint32, errno syscall.Errno) {
 	return nil, nil, 0, 0
 }
 
@@ -112,4 +113,4 @@ func (n *NetSNode) Unlink(ctx context.Context, name string) syscall.Errno {
 
 func (n *NetSNode) Fsync(ctx context.Context, f fs.FileHandle, flags uint32) syscall.Errno {
 	return 0
-}
+}*/
