@@ -20,6 +20,7 @@ import (
 	"context"
 	"strconv"
 	"syscall"
+	"time"
 )
 
 const (
@@ -54,6 +55,7 @@ const MaxName = 255
 type Ino uint64
 
 const RootInode Ino = 1
+const SkipDirMtime time.Duration = 100 * time.Millisecond
 
 func (i Ino) String() string {
 	return strconv.FormatUint(uint64(i), 10)
@@ -67,17 +69,9 @@ func (i Ino) IsNormal() bool {
 	return i >= RootInode
 }
 
-type internalNode struct {
-	inode Ino
-	name  string
-}
-
 // Type of control messages
 const CPROGRESS = 0xFE // 16 bytes: progress increment
 const CDATA = 0xFF     // 4 bytes: data length
-
-// MsgCallback is a callback for messages from meta service.
-type MsgCallback func(...interface{}) error
 
 // Attr represents attributes of a node.
 type Attr struct {
@@ -151,7 +145,7 @@ type Meta interface {
 	// Init is used to initialize a meta service.
 	Init(format *Format) error
 	// Shutdown close current database connections.
-	Shutdown() error
+	Shutdown()
 	Load() (*Format, error)
 
 	// StatFS returns summary statistics of a volume (no need here as it is handled in node, just for reference)
@@ -177,7 +171,8 @@ type Meta interface {
 	// Readdir returns all entries for given directory, which include attributes if plus is true.
 	// doReaddir(ctx context.Context, inode Ino, wantattr uint8, entries *[]*Entry) syscall.Errno
 	// Create creates a file in a directory with given name.
-	// doCreate(ctx context.Context, parent Ino, name string, mode uint16, cumask uint16, flags uint32, inode *Ino, attr *Attr) syscall.Errno
+	// Create(ctx context.Context, parent Ino, name string, mode uint16, cumask uint16, flags uint32, inode *Ino, attr *Attr) syscall.Errno
+	Mknod(ctx context.Context, parent Ino, name string, _type uint8, mode uint32, inode *Ino, attr *Attr) syscall.Errno
 	// Open checks permission on a node and track it as open.
 	// doOpen(ctx context.Context, inode Ino, flags uint32, attr *Attr) syscall.Errno
 	// Close a file.
@@ -186,19 +181,6 @@ type Meta interface {
 	// doRead(ctx context.Context, inode Ino, indx uint32, slices *[]Slice) syscall.Errno
 	// Write put a slice of data on top of the given chunk.
 	// doWrite(ctx context.Context, inode Ino, indx uint32, off uint32, slice Slice, mtime time.Time) syscall.Errno
-	// GetParents returns a map of node parents (> 1 parents if hardlinked)
-	// doGetParents(ctx context.Context, inode Ino) map[Ino]int
-
-	/*// GetPaths returns all paths of an inode
-	GetPaths(ctx context.Context, inode Ino) []string
-	// Check integrity of an absolute path and repair it if asked
-	Check(ctx context.Context, fpath string, repair bool, recursive bool, statAll bool) error
-	// Change root to a directory specified by subdir
-	Chroot(ctx context.Context, subdir string) syscall.Errno
-	// chroot set the root directory by inode
-	chroot(inode Ino)
-	// Get a copy of the current format
-	GetFormat() Format*/
 }
 
 func RegisterMeta(addr string) Meta {

@@ -201,8 +201,8 @@ func (m *dbMeta) Init(format *Format) error {
 	})
 }
 
-func (m *dbMeta) Shutdown() error {
-	return m.db.Close()
+func (m *dbMeta) Shutdown() {
+	m.db.Close()
 }
 
 func (m *dbMeta) parseAttr(n *node, attr *Attr) {
@@ -224,6 +224,26 @@ func (m *dbMeta) parseAttr(n *node, attr *Attr) {
 	attr.Rdev = n.Rdev
 	attr.Parent = n.Parent
 	attr.Full = true
+}
+
+func (m *dbMeta) parseNode(attr *Attr, n *node) {
+	if attr == nil || n == nil {
+		return
+	}
+	n.Type = attr.Typ
+	n.Mode = attr.Mode
+	n.Uid = attr.Uid
+	n.Gid = attr.Gid
+	n.Atime = attr.Atime*1e6 + int64(attr.Atimensec)/1000
+	n.Mtime = attr.Mtime*1e6 + int64(attr.Mtimensec)/1000
+	n.Ctime = attr.Ctime*1e6 + int64(attr.Ctimensec)/1000
+	n.Atimensec = int16(attr.Atimensec % 1000)
+	n.Mtimensec = int16(attr.Mtimensec % 1000)
+	n.Ctimensec = int16(attr.Ctimensec % 1000)
+	n.Nlink = attr.Nlink
+	n.Length = attr.Length
+	n.Rdev = attr.Rdev
+	n.Parent = attr.Parent
 }
 
 func mustInsert(s *xorm.Session, beans ...interface{}) error {
@@ -341,6 +361,95 @@ func (m *dbMeta) Lookup(ctx context.Context, parent Ino, name string, inode *Ino
 		fmt.Println("LOOKUP", parent, name, inode, attr)
 		return nil
 	}))
+}
+
+func (m *dbMeta) Mknod(ctx context.Context, parent Ino, name string, _type uint8, mode uint32, inode *Ino, attr *Attr) syscall.Errno {
+	return errno(m.txn(func(s *xorm.Session) error {
+		var pn = node{Inode: parent}
+		ok, err := s.Get(&pn)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return syscall.ENOENT
+		}
+		if pn.Type != TypeDirectory {
+			return syscall.ENOTDIR
+		}
+		var pattr Attr
+		m.parseAttr(&pn, &pattr)
+		var e = edge{Parent: parent, Name: []byte(name)}
+		ok, err = s.Get(&e)
+		if err != nil {
+			return err
+		}
+		var foundIno Ino
+		var foundType uint8
+		if ok {
+			foundType, foundIno = e.Type, e.Inode
+		}
+		if foundIno != 0 {
+			if _type == TypeFile || _type == TypeDirectory {
+				foundNode := node{Inode: foundIno}
+				ok, err = s.Get(&foundNode)
+				if err != nil {
+					return err
+				} else if ok {
+					m.parseAttr(&foundNode, attr)
+				} else if attr != nil {
+					*attr = Attr{Typ: foundType, Parent: parent} // corrupt entry
+				}
+				*inode = foundIno
+			}
+			return syscall.EEXIST
+		}
+
+		n := node{Inode: *inode}
+		m.parseNode(attr, &n) // do almost nothing here (attr is empty)
+		mode &= 07777
+
+		var updateParent bool
+		now := time.Now().UnixNano()
+		if _type == TypeDirectory {
+			pn.Nlink++
+			updateParent = true
+		}
+		if updateParent || time.Duration(now-pn.Mtime*1e3-int64(pn.Mtimensec)) >= SkipDirMtime {
+			pn.Mtime = now / 1e3
+			pn.Ctime = now / 1e3
+			updateParent = true
+		}
+		n.Atime = now / 1e3
+		n.Mtime = now / 1e3
+		n.Ctime = now / 1e3
+		n.Atimensec = int16(now % 1e3)
+		n.Mtimensec = int16(now % 1e3)
+		n.Ctimensec = int16(now % 1e3)
+		n.Parent = parent
+		if _type == TypeDirectory {
+			n.Nlink = 2
+			n.Mode |= 0755
+			n.Length = 4 << 10 // 4KB
+			n.Type = TypeDirectory
+		} else if _type == TypeFile {
+			n.Nlink = 1
+			n.Length = 0
+			n.Mode |= 0644
+			n.Rdev = 0
+			n.Type = TypeFile
+		}
+
+		if err = mustInsert(s, &edge{Parent: parent, Name: []byte(name), Inode: *inode, Type: _type}, &n); err != nil {
+			return err
+		}
+		if updateParent {
+			if _, err := s.Cols("nlink", "mtime", "ctime", "mtimensec", "ctimensec").Update(&pn, &node{Inode: pn.Inode}); err != nil {
+				return err
+			}
+		}
+		m.parseAttr(&n, attr)
+		return nil
+	}, parent))
 }
 
 func newSQLMeta(driver, addr string) (Meta, error) {

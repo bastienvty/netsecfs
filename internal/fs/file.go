@@ -3,6 +3,10 @@ package fs
 import (
 	"os"
 	"sync"
+	"syscall"
+
+	"github.com/bastienvty/netsecfs/internal/db/meta"
+	"github.com/hanwen/go-fuse/v2/fs"
 )
 
 // https://github.com/aegistudio/enigma/blob/master/cmd/enigma/fuse_unix.go
@@ -13,24 +17,39 @@ import (
 // nanafs
 // gocryptfs
 
-type File struct {
-	Node
-	mu sync.Mutex
-	fd *os.File
+type FileHandle struct {
+	ino meta.Ino
+	mu  sync.Mutex
+	fd  *os.File
 }
 
-/*var _ = (fs.FileGetattrer)((*NSFile)(nil))
-var _ = (fs.FileReader)((*NSFile)(nil))
-var _ = (fs.FileWriter)((*NSFile)(nil))
-var _ = (fs.FileFlusher)((*NSFile)(nil))
-var _ = (fs.FileReleaser)((*NSFile)(nil))
-var _ = (fs.FileFsyncer)((*NSFile)(nil))
+var _ fs.FileHandle = (*FileHandle)(nil)
 
-func NewNSFile(data []byte) *NSFile {
-	return &NSFile{}
+// var _ = (fs.FileGetattrer)((*File)(nil))
+// var _ = (fs.FileReader)((*File)(nil))
+// var _ = (fs.FileWriter)((*File)(nil))
+// var _ = (fs.FileFlusher)((*File)(nil))
+// var _ = (fs.FileReleaser)((*File)(nil))
+// var _ = (fs.FileFsyncer)((*File)(nil))
+
+func newFileHandle(ino meta.Ino, name string) (fh *FileHandle, errno syscall.Errno) {
+	st := &syscall.Stat_t{}
+	if err := syscall.Fstat(int(ino), st); err != nil {
+		errno = fs.ToErrno(err)
+		return
+	}
+
+	osFile := os.NewFile(uintptr(ino), name)
+
+	fh = &FileHandle{
+		ino: ino,
+		fd:  osFile,
+	}
+
+	return fh, 0
 }
 
-func (f *NSFile) Getattr(ctx context.Context, out *fuse.AttrOut) syscall.Errno {
+/*func (f *NSFile) Getattr(ctx context.Context, out *fuse.AttrOut) syscall.Errno {
 	return 0
 }
 
