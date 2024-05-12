@@ -147,6 +147,7 @@ type Meta interface {
 	// Shutdown close current database connections.
 	Shutdown()
 	Load() (*Format, error)
+	GetNextInode(ctx context.Context, lastIno *Ino) error
 
 	// StatFS returns summary statistics of a volume (no need here as it is handled in node, just for reference)
 	// StatFS(ctx context.Context, ino Ino, totalspace, availspace, iused, iavail *uint64) syscall.Errno

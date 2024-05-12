@@ -55,7 +55,7 @@ func mount(cmd *cobra.Command, args []string) {
 	}
 	fuseOpts.MountOptions = fuse.MountOptions{
 		Options: []string{"rw", "default_permissions"},
-		Debug:   true,
+		Debug:   false,
 		Name:    "netsecfs",
 	}
 	fuseOpts.MountOptions.Options = append(fuseOpts.MountOptions.Options, "noapplexattr", "noappledouble") // macOS

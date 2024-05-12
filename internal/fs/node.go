@@ -3,6 +3,7 @@ package fs
 import (
 	"context"
 	"fmt"
+	"os"
 	"syscall"
 	"time"
 
@@ -31,13 +32,6 @@ const (
 	EntryTimeout    = 1 * time.Second
 	AttrTimeout     = 1 * time.Second
 )
-
-// TODO: Make the variable random or use tables to handle more clients
-var nextInode meta.Ino = 1000
-
-type RootNode struct {
-	fs.Inode
-}
 
 type Node struct {
 	fs.Inode
@@ -89,14 +83,8 @@ func (n *Node) Lookup(ctx context.Context, name string, out *fuse.EntryOut) (*fs
 	}
 	entry := &meta.Entry{Inode: ino, Attr: attr}
 	attrToStat(entry.Inode, entry.Attr, &out.Attr)
-	var stMode uint32
-	if attr.Typ == meta.TypeDirectory {
-		stMode = syscall.S_IFDIR
-	} else {
-		stMode = syscall.S_IFREG
-	}
 	st := fs.StableAttr{
-		Mode: stMode,
+		Mode: attr.SMode(),
 		Ino:  uint64(entry.Inode),
 		// Gen:  1,
 	}
@@ -106,9 +94,14 @@ func (n *Node) Lookup(ctx context.Context, name string, out *fuse.EntryOut) (*fs
 }
 
 func attrToStat(inode meta.Ino, attr *meta.Attr, out *fuse.Attr) {
+	if inode == meta.RootInode {
+		out.Uid = 0
+		out.Gid = 0
+	} else {
+		out.Uid = uint32(os.Getuid())
+		out.Gid = uint32(os.Getgid())
+	}
 	out.Ino = uint64(inode)
-	out.Uid = attr.Uid
-	out.Gid = attr.Gid
 	out.Mode = attr.SMode()
 	out.Nlink = attr.Nlink
 	out.Atime = uint64(attr.Atime)
@@ -176,9 +169,9 @@ func (n *Node) Create(ctx context.Context, name string, flags uint32, mode uint3
 	}
 	attr := &meta.Attr{}
 	parent := meta.Ino(n.StableAttr().Ino)
-	ino := nextInode
+	var ino meta.Ino
+	n.meta.GetNextInode(ctx, &ino)
 	err := n.meta.Mknod(ctx, parent, name, meta.TypeFile, mode, &ino, attr)
-	fmt.Println("Mknod create", parent, name, ino, attr)
 	if err != 0 {
 		return nil, nil, 0, err
 	}
@@ -188,23 +181,16 @@ func (n *Node) Create(ctx context.Context, name string, flags uint32, mode uint3
 	ops := Node{
 		meta: n.meta,
 	}
-	var stMode uint32
-	if attr.Typ == meta.TypeDirectory {
-		stMode = syscall.S_IFDIR
-	} else {
-		stMode = syscall.S_IFREG
-	}
 	st := fs.StableAttr{
-		Mode: stMode,
+		Mode: attr.SMode(),
 		Ino:  uint64(entry.Inode),
 		// Gen:  1,
 	}
 	node = n.NewInode(ctx, &ops, st)
 	n.AddChild(name, node, true)
-	nextInode++
-	fmt.Println("Create", ino, name)
-	fmt.Println("NewNode in create", node)
-	fmt.Println("Parent node", n)
+	// fmt.Println("Create", ino, name)
+	// fmt.Println("NewNode in create", node)
+	// fmt.Println("Parent node", n)
 	/*fh, err = newFileHandle(ino, name)
 	if err != 0 {
 		return node, nil, 0, err
@@ -220,13 +206,13 @@ func (n *Node) Create(ctx context.Context, name string, flags uint32, mode uint3
 
 func (n *Node) Opendir(ctx context.Context) syscall.Errno {
 	return 0
-}
+}*/
 
-func (n *Node) Readdir(ctx context.Context) (fs.DirStream, syscall.Errno) {
-	return nil, 0
-}
+// func (n *Node) Readdir(ctx context.Context) (fs.DirStream, syscall.Errno) {
+// 	return nil, 0
+// }
 
-func (n *Node) Mkdir(ctx context.Context, name string, mode uint32, out *fuse.EntryOut) (*fs.Inode, syscall.Errno) {
+/*func (n *Node) Mkdir(ctx context.Context, name string, mode uint32, out *fuse.EntryOut) (*fs.Inode, syscall.Errno) {
 	return nil, 0
 }
 

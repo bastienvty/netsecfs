@@ -37,8 +37,6 @@ type node struct {
 	Inode     Ino    `xorm:"pk"`
 	Type      uint8  `xorm:"notnull"`
 	Mode      uint16 `xorm:"notnull"`
-	Uid       uint32 `xorm:"notnull"`
-	Gid       uint32 `xorm:"notnull"`
 	Atime     int64  `xorm:"notnull"`
 	Mtime     int64  `xorm:"notnull"`
 	Ctime     int64  `xorm:"notnull"`
@@ -211,8 +209,6 @@ func (m *dbMeta) parseAttr(n *node, attr *Attr) {
 	}
 	attr.Typ = n.Type
 	attr.Mode = n.Mode
-	attr.Uid = n.Uid
-	attr.Gid = n.Gid
 	attr.Atime = n.Atime / 1e6
 	attr.Atimensec = uint32(n.Atime%1e6*1000) + uint32(n.Atimensec)
 	attr.Mtime = n.Mtime / 1e6
@@ -232,8 +228,6 @@ func (m *dbMeta) parseNode(attr *Attr, n *node) {
 	}
 	n.Type = attr.Typ
 	n.Mode = attr.Mode
-	n.Uid = attr.Uid
-	n.Gid = attr.Gid
 	n.Atime = attr.Atime*1e6 + int64(attr.Atimensec)/1000
 	n.Mtime = attr.Mtime*1e6 + int64(attr.Mtimensec)/1000
 	n.Ctime = attr.Ctime*1e6 + int64(attr.Ctimensec)/1000
@@ -322,6 +316,19 @@ func (m *dbMeta) roTxn(f func(s *xorm.Session) error) error {
 	}
 	logger.Warnf("Already tried 50 times, returning: %s", lastErr)
 	return lastErr
+}
+
+func (m *dbMeta) GetNextInode(ctx context.Context, lastIno *Ino) error {
+	return m.roTxn(func(s *xorm.Session) error {
+		var n node
+		if _, err := s.Desc("Inode").Get(&n); err != nil {
+			return err
+		}
+		ino := n.Inode
+		ino++
+		*lastIno = ino
+		return nil
+	})
 }
 
 func (m *dbMeta) GetAttr(ctx context.Context, inode Ino, attr *Attr) syscall.Errno {
