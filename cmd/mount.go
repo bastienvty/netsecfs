@@ -2,12 +2,10 @@ package cmd
 
 import (
 	"fmt"
-	"os"
 	"syscall"
 	"time"
 
 	"github.com/bastienvty/netsecfs/internal/db/meta"
-	"github.com/bastienvty/netsecfs/internal/db/object"
 	"github.com/bastienvty/netsecfs/internal/fs"
 	gofs "github.com/hanwen/go-fuse/v2/fs"
 	"github.com/hanwen/go-fuse/v2/fuse"
@@ -34,11 +32,11 @@ func mount(cmd *cobra.Command, args []string) {
 	mp := args[0]
 
 	m := meta.RegisterMeta(addr)
-	format, err := m.Load()
+	/*format, err := m.Load()
 	if err != nil {
 		fmt.Println("Load fail: ", err)
 		return
-	}
+	}*/
 
 	var fuseOpts *gofs.Options
 	sec := time.Second
@@ -48,19 +46,20 @@ func mount(cmd *cobra.Command, args []string) {
 		NegativeTimeout: &sec,
 		AttrTimeout:     &sec,
 		EntryTimeout:    &sec,
-		/*RootStableAttr: &gofs.StableAttr{
+		RootStableAttr: &gofs.StableAttr{
 			Ino: uint64(meta.RootInode),
-		},*/
+		},
 		//UID:             uint32(os.Getuid()),
 		//GID:             uint32(os.Getgid()),
 	}
 	fuseOpts.MountOptions = fuse.MountOptions{
 		Options: []string{"rw", "default_permissions"},
-		Debug:   false,
+		Debug:   true,
 		Name:    "netsecfs",
 	}
+	fuseOpts.MountOptions.Options = append(fuseOpts.MountOptions.Options, "noapplexattr", "noappledouble") // macOS
 
-	blob, err := object.CreateStorage(format.Storage)
+	/*blob, err := object.CreateStorage(format.Storage)
 	if err != nil {
 		fmt.Println("CreateStorage fail: ", err)
 		return
@@ -73,11 +72,11 @@ func mount(cmd *cobra.Command, args []string) {
 	}
 	if blob != nil {
 		object.Shutdown(blob)
-	}
+	}*/
 
 	//fuseOpts.MountOptions.Options = append(fuseOpts.MountOptions.Options, "rw")
 	syscall.Umask(0000)
-	root := &fs.Node{}
+	root := fs.NewNode(m)
 	server, err := gofs.Mount(mp, root, fuseOpts)
 	if err != nil {
 		fmt.Println("Mount fail: ", err)

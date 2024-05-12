@@ -154,14 +154,14 @@ type Meta interface {
 	Shutdown() error
 	Load() (*Format, error)
 
-	// StatFS returns summary statistics of a volume.
-	// doStatFS(ctx context.Context, ino Ino, totalspace, availspace, iused, iavail *uint64) syscall.Errno
+	// StatFS returns summary statistics of a volume (no need here as it is handled in node, just for reference)
+	// StatFS(ctx context.Context, ino Ino, totalspace, availspace, iused, iavail *uint64) syscall.Errno
 	// Access checks the access permission on given inode.
 	// doAccess(ctx context.Context, inode Ino, modemask uint8, attr *Attr) syscall.Errno
 	// Lookup returns the inode and attributes for the given entry in a directory.
-	doLookup(ctx context.Context, parent Ino, name string, inode *Ino, attr *Attr) syscall.Errno
+	Lookup(ctx context.Context, parent Ino, name string, inode *Ino, attr *Attr) syscall.Errno
 	// GetAttr returns the attributes for given node.
-	// doGetAttr(ctx context.Context, inode Ino, attr *Attr) syscall.Errno
+	GetAttr(ctx context.Context, inode Ino, attr *Attr) syscall.Errno
 	// doMknod(ctx context.Context, parent Ino, name string, _type uint8, mode uint16, cumask uint16, rdev uint32, path string, inode *Ino, attr *Attr) syscall.Errno
 	// Mkdir creates a sub-directory with given name and mode.
 	// doMkdir(ctx context.Context, parent Ino, name string, mode uint16, cumask uint16, copysgid uint8, inode *Ino, attr *Attr) syscall.Errno

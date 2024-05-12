@@ -21,10 +21,21 @@ const (
 	maxName = meta.MaxName
 	/*maxSymlink  = meta.MaxSymlink
 	maxFileSize = meta.ChunkSize << 31*/
+	fileBlockSize = 1 << 12          // 4k
+	maxSize       = 1125899906842624 // 1TB
 )
+
+type RootNode struct {
+	fs.Inode
+}
 
 type Node struct {
 	fs.Inode
+	meta meta.Meta
+}
+
+func NewNode(meta meta.Meta) *Node {
+	return &Node{meta: meta}
 }
 
 func (n *Node) isRoot() bool {
@@ -35,11 +46,10 @@ func (n *Node) isRoot() bool {
 var _ = (fs.InodeEmbedder)((*Node)(nil))
 var _ = (fs.NodeLookuper)((*Node)(nil))
 var _ = (fs.NodeGetattrer)((*Node)(nil))
-
-/*var _ = (fs.NodeStatfser)((*Node)(nil))
+var _ = (fs.NodeStatfser)((*Node)(nil))
 
 // var _ = (fs.NodeOpener)((*Node)(nil))
-var _ = (fs.NodeCreater)((*Node)(nil))
+/*var _ = (fs.NodeCreater)((*Node)(nil))
 var _ = (fs.NodeRenamer)((*Node)(nil))
 
 var _ = (fs.NodeAccesser)((*Node)(nil))
@@ -55,28 +65,86 @@ func (n *Node) Lookup(ctx context.Context, name string, out *fuse.EntryOut) (*fs
 	if len(name) > maxName {
 		return nil, syscall.ENAMETOOLONG
 	}
-	fmt.Println("Lookup node", n, "with ino", n.Inode.StableAttr().Ino)
-	fmt.Println("Lookup name", name)
+	var err syscall.Errno
+	var attr = &meta.Attr{}
+	var inode *meta.Ino
+	ino := meta.Ino(n.StableAttr().Ino)
+	err = n.meta.Lookup(ctx, ino, name, inode, attr)
+	if err != 0 {
+		return nil, err
+	}
+	fmt.Println("LOOKUP", ino, name, inode, attr)
 	ops := Node{}
 	out.Mode = 0755
 	out.Size = 42
 	return n.NewInode(ctx, &ops, fs.StableAttr{Mode: syscall.S_IFREG}), 0
 }
 
+func attrToStat(inode meta.Ino, attr *meta.Attr, out *fuse.Attr) {
+	out.Ino = uint64(inode)
+	out.Uid = attr.Uid
+	out.Gid = attr.Gid
+	out.Mode = attr.SMode()
+	out.Nlink = attr.Nlink
+	out.Atime = uint64(attr.Atime)
+	out.Atimensec = attr.Atimensec
+	out.Mtime = uint64(attr.Mtime)
+	out.Mtimensec = attr.Mtimensec
+	out.Ctime = uint64(attr.Ctime)
+	out.Ctimensec = attr.Ctimensec
+
+	var size, blocks uint64
+	switch attr.Typ {
+	case meta.TypeDirectory:
+		fallthrough
+	case meta.TypeFile:
+		size = attr.Length
+		blocks = (size + 511) / 512
+	}
+	out.Size = size
+	out.Blocks = blocks
+	out.Blksize = 4096
+}
+
 func (n *Node) Getattr(ctx context.Context, f fs.FileHandle, out *fuse.AttrOut) (errno syscall.Errno) {
 	if f != nil {
 		return f.(fs.FileGetattrer).Getattr(ctx, out)
 	}
-	out.Mode = n.Mode()
-	out.Size = 456
-	return fs.OK
+	var err syscall.Errno
+	var attr = &meta.Attr{}
+	ino := meta.Ino(n.StableAttr().Ino)
+	err = n.meta.GetAttr(ctx, ino, attr)
+	if err == 0 {
+		entry := &meta.Entry{Inode: ino, Attr: attr}
+		attrToStat(entry.Inode, entry.Attr, &out.Attr)
+	}
+	return err
 }
 
-/*func (n *Node) Statfs(ctx context.Context, out *fuse.StatfsOut) syscall.Errno {
+/*func fsInfo2StatFs(out *fuse.StatfsOut) {
+	out.Blocks = maxSize / fileBlockSize
+	out.Bfree = (maxSize - info.UsageSize) / fileBlockSize
+	out.Bavail = out.Bfree
+	out.Files = info.AvailInodes
+	out.Ffree = info.AvailInodes - info.Objects
+	out.Bsize = uint32(fileBlockSize)
+	out.NameLen = maxName
+}*/
+
+func (n *Node) Statfs(ctx context.Context, out *fuse.StatfsOut) syscall.Errno {
+	out.Blocks = uint64(maxSize) / fileBlockSize    // Total data blocks in file system.
+	out.Bfree = uint64(maxSize-1e9) / fileBlockSize // Free blocks in file system.
+	out.Bavail = out.Bfree                          // Free blocks in file system if you're not root.
+	out.Files = 1e9                                 // Total files in file system.
+	out.Ffree = 1e9                                 // Free files in file system.
+	out.Bsize = fileBlockSize                       // Block size
+	out.NameLen = 255                               // Maximum file name length?
+	out.Frsize = fileBlockSize                      // Fragment size, smallest addressable data size in the file system.
+	fmt.Println("STATFS", out)
 	return 0
 }
 
-func (n *Node) Access(ctx context.Context, mask uint32) syscall.Errno {
+/*func (n *Node) Access(ctx context.Context, mask uint32) syscall.Errno {
 	return 0
 }*/
 

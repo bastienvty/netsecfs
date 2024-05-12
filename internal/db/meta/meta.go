@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"runtime"
+	"runtime/debug"
 	"strings"
 	"sync"
 	"syscall"
@@ -17,7 +18,7 @@ import (
 	"xorm.io/xorm/names"
 )
 
-var logger = utils.GetLogger("juicefs")
+var logger = utils.GetLogger("netsecfs")
 
 type setting struct {
 	Name  string `xorm:"pk"`
@@ -72,6 +73,17 @@ type dbMeta struct {
 	parentMu   sync.Mutex // protect dirParents
 }
 
+func errno(err error) syscall.Errno {
+	if err == nil {
+		return 0
+	}
+	if eno, ok := err.(syscall.Errno); ok {
+		return eno
+	}
+	logger.Errorf("error: %s\n%s", err, debug.Stack())
+	return syscall.EIO
+}
+
 func (m *dbMeta) Name() string {
 	return m.addr
 }
@@ -79,7 +91,7 @@ func (m *dbMeta) Name() string {
 func (m *dbMeta) Load() (*Format, error) {
 	body, err := m.doLoad()
 	if err == nil && len(body) == 0 {
-		err = fmt.Errorf("database is not formatted, please run `juicefs format ...` first")
+		err = fmt.Errorf("database is not formatted, please run `netsecfs init ...` first")
 	}
 	if err != nil {
 		return nil, err
@@ -292,19 +304,29 @@ func (m *dbMeta) roTxn(f func(s *xorm.Session) error) error {
 	return lastErr
 }
 
-/*func (m *dbMeta) GetAttr(ctx context.Context, f fs.FileHandle, out *fuse.AttrOut) (ch *fs.Inode, errno syscall.Errno) {
-	return nil, syscall.ENOSYS
-}*/
+func (m *dbMeta) GetAttr(ctx context.Context, inode Ino, attr *Attr) syscall.Errno {
+	return errno(m.roTxn(func(s *xorm.Session) error {
+		var n = node{Inode: inode}
+		ok, err := s.Get(&n)
+		if err != nil {
+			return err
+		} else if !ok {
+			return syscall.ENOENT
+		}
+		m.parseAttr(&n, attr)
+		return nil
+	}))
+}
 
-func (m *dbMeta) doLookup(ctx context.Context, parent Ino, name string, inode *Ino, attr *Attr) syscall.Errno {
-	err := m.roTxn(func(s *xorm.Session) error {
+func (m *dbMeta) Lookup(ctx context.Context, parent Ino, name string, inode *Ino, attr *Attr) syscall.Errno {
+	return errno(m.roTxn(func(s *xorm.Session) error {
 		s = s.Table(&edge{})
 		nn := namedNode{node: node{Parent: parent}, Name: []byte(name)}
 		var exist bool
 		var err error
 		if attr != nil {
-			s = s.Join("INNER", &node{}, "jfs_edge.inode=jfs_node.inode")
-			exist, err = s.Select("jfs_node.*").Get(&nn)
+			s = s.Join("INNER", &node{}, "nsfs_edge.inode=nsfs_node.inode")
+			exist, err = s.Select("nsfs_node.*").Get(&nn)
 		} else {
 			exist, err = s.Select("*").Get(&nn)
 		}
@@ -316,13 +338,9 @@ func (m *dbMeta) doLookup(ctx context.Context, parent Ino, name string, inode *I
 		}
 		*inode = nn.Inode
 		m.parseAttr(&nn.node, attr)
-		// fmt.Println("LOOKUP", parent, name, inode, attr)
+		fmt.Println("LOOKUP", parent, name, inode, attr)
 		return nil
-	})
-	if eno, ok := err.(syscall.Errno); ok {
-		return eno
-	}
-	return 0
+	}))
 }
 
 func newSQLMeta(driver, addr string) (Meta, error) {
