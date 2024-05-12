@@ -1,5 +1,10 @@
 package fs
 
+import (
+	"os"
+	"sync"
+)
+
 // https://github.com/aegistudio/enigma/blob/master/cmd/enigma/fuse_unix.go
 // https://github.com/pachyderm/pachyderm/blob/master/src/server/pfs/fuse/files.go
 // https://github.com/rclone/rclone/blob/b2f6aac754c5d46c66758db46ecb89aa85c3c113/cmd/mount2/file.go
@@ -8,13 +13,13 @@ package fs
 // nanafs
 // gocryptfs
 
-/*type NSFile struct {
-	NetSNode
+type File struct {
+	Node
 	mu sync.Mutex
-	fd int
+	fd *os.File
 }
 
-var _ = (fs.FileGetattrer)((*NSFile)(nil))
+/*var _ = (fs.FileGetattrer)((*NSFile)(nil))
 var _ = (fs.FileReader)((*NSFile)(nil))
 var _ = (fs.FileWriter)((*NSFile)(nil))
 var _ = (fs.FileFlusher)((*NSFile)(nil))
@@ -29,12 +34,12 @@ func (f *NSFile) Getattr(ctx context.Context, out *fuse.AttrOut) syscall.Errno {
 	return 0
 }
 
-func (f *NSFile) Read(ctx context.Context, dest []byte, off int64) (fuse.ReadResult, syscall.Errno) {
+func (f *File) Read(ctx context.Context, dest []byte, off int64) (fuse.ReadResult, syscall.Errno) {
 	// s := iofs.StatFS().FS
 	return nil, 0
-}
+}*/
 
-func (f *NSFile) Write(ctx context.Context, data []byte, off int64) (written uint32, errno syscall.Errno) {
+/*func (f *NSFile) Write(ctx context.Context, data []byte, off int64) (written uint32, errno syscall.Errno) {
 	return 0, 0
 }
 

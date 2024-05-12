@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"syscall"
 
+	"github.com/bastienvty/netsecfs/internal/db/meta"
 	"github.com/hanwen/go-fuse/v2/fs"
 	"github.com/hanwen/go-fuse/v2/fuse"
 )
@@ -15,54 +16,54 @@ import (
 // https://github.com/materials-commons/hydra/blob/main/pkg/mcfs/fs/mcbridgefs/node.go
 //
 
-type NetSRootNode struct {
-	NetSNode
-	Path string
-	Dev  uint64
-}
+const (
+	rootID  = 1
+	maxName = meta.MaxName
+	/*maxSymlink  = meta.MaxSymlink
+	maxFileSize = meta.ChunkSize << 31*/
+)
 
-type NetSNode struct {
+type Node struct {
 	fs.Inode
 }
 
-func NewNetSNode(data []byte) *NetSNode {
-	return &NetSNode{}
-}
-
-func (n *NetSNode) isRoot() bool {
+func (n *Node) isRoot() bool {
 	_, parent := n.Parent()
 	return parent == nil
 }
 
-var _ = (fs.InodeEmbedder)((*NetSNode)(nil))
+var _ = (fs.InodeEmbedder)((*Node)(nil))
+var _ = (fs.NodeLookuper)((*Node)(nil))
+var _ = (fs.NodeGetattrer)((*Node)(nil))
 
-var _ = (fs.NodeLookuper)((*NetSNode)(nil))
+/*var _ = (fs.NodeStatfser)((*Node)(nil))
 
-/*var _ = (fs.NodeGetattrer)((*NetSNode)(nil))
-var _ = (fs.NodeStatfser)((*NetSNode)(nil))
+// var _ = (fs.NodeOpener)((*Node)(nil))
+var _ = (fs.NodeCreater)((*Node)(nil))
+var _ = (fs.NodeRenamer)((*Node)(nil))
 
-// var _ = (fs.NodeOpener)((*NetSNode)(nil))
-var _ = (fs.NodeCreater)((*NetSNode)(nil))
-var _ = (fs.NodeRenamer)((*NetSNode)(nil))
+var _ = (fs.NodeAccesser)((*Node)(nil))
+var _ = (fs.NodeOpendirer)((*Node)(nil))
+var _ = (fs.NodeReaddirer)((*Node)(nil))
+var _ = (fs.NodeMkdirer)((*Node)(nil))
+var _ = (fs.NodeRmdirer)((*Node)(nil))
 
-var _ = (fs.NodeAccesser)((*NetSNode)(nil))
-var _ = (fs.NodeOpendirer)((*NetSNode)(nil))
-var _ = (fs.NodeReaddirer)((*NetSNode)(nil))
-var _ = (fs.NodeMkdirer)((*NetSNode)(nil))
-var _ = (fs.NodeRmdirer)((*NetSNode)(nil))
+var _ = (fs.NodeUnlinker)((*Node)(nil)) // vim
+var _ = (fs.NodeFsyncer)((*Node)(nil))  // vim*/
 
-var _ = (fs.NodeUnlinker)((*NetSNode)(nil)) // vim
-var _ = (fs.NodeFsyncer)((*NetSNode)(nil))  // vim*/
-
-func (n *NetSNode) Lookup(ctx context.Context, name string, out *fuse.EntryOut) (*fs.Inode, syscall.Errno) {
-	ops := NetSNode{}
+func (n *Node) Lookup(ctx context.Context, name string, out *fuse.EntryOut) (*fs.Inode, syscall.Errno) {
+	if len(name) > maxName {
+		return nil, syscall.ENAMETOOLONG
+	}
+	fmt.Println("Lookup node", n, "with ino", n.Inode.StableAttr().Ino)
+	fmt.Println("Lookup name", name)
+	ops := Node{}
 	out.Mode = 0755
 	out.Size = 42
-	fmt.Println("Lookup ", name)
 	return n.NewInode(ctx, &ops, fs.StableAttr{Mode: syscall.S_IFREG}), 0
 }
 
-/*func (n *NetSNode) Getattr(ctx context.Context, f fs.FileHandle, out *fuse.AttrOut) (errno syscall.Errno) {
+func (n *Node) Getattr(ctx context.Context, f fs.FileHandle, out *fuse.AttrOut) (errno syscall.Errno) {
 	if f != nil {
 		return f.(fs.FileGetattrer).Getattr(ctx, out)
 	}
@@ -71,46 +72,46 @@ func (n *NetSNode) Lookup(ctx context.Context, name string, out *fuse.EntryOut) 
 	return fs.OK
 }
 
-func (n *NetSNode) Statfs(ctx context.Context, out *fuse.StatfsOut) syscall.Errno {
+/*func (n *Node) Statfs(ctx context.Context, out *fuse.StatfsOut) syscall.Errno {
 	return 0
 }
 
-func (n *NetSNode) Access(ctx context.Context, mask uint32) syscall.Errno {
+func (n *Node) Access(ctx context.Context, mask uint32) syscall.Errno {
 	return 0
 }*/
 
-/*func (n *NetSNode) Open(ctx context.Context, flags uint32) (fh fs.FileHandle, fuseFlags uint32, errno syscall.Errno) {
+/*func (n *Node) Open(ctx context.Context, flags uint32) (fh fs.FileHandle, fuseFlags uint32, errno syscall.Errno) {
 	return nil, 0, 0
 }*/
 
-/*func (n *NetSNode) Create(ctx context.Context, name string, flags uint32, mode uint32, out *fuse.EntryOut) (node *fs.Inode, fh fs.FileHandle, fuseFlags uint32, errno syscall.Errno) {
+/*func (n *Node) Create(ctx context.Context, name string, flags uint32, mode uint32, out *fuse.EntryOut) (node *fs.Inode, fh fs.FileHandle, fuseFlags uint32, errno syscall.Errno) {
 	return nil, nil, 0, 0
 }
 
-func (n *NetSNode) Rename(ctx context.Context, name string, newParent fs.InodeEmbedder, newName string, flags uint32) syscall.Errno {
+func (n *Node) Rename(ctx context.Context, name string, newParent fs.InodeEmbedder, newName string, flags uint32) syscall.Errno {
 	return 0
 }
 
-func (n *NetSNode) Opendir(ctx context.Context) syscall.Errno {
+func (n *Node) Opendir(ctx context.Context) syscall.Errno {
 	return 0
 }
 
-func (n *NetSNode) Readdir(ctx context.Context) (fs.DirStream, syscall.Errno) {
+func (n *Node) Readdir(ctx context.Context) (fs.DirStream, syscall.Errno) {
 	return nil, 0
 }
 
-func (n *NetSNode) Mkdir(ctx context.Context, name string, mode uint32, out *fuse.EntryOut) (*fs.Inode, syscall.Errno) {
+func (n *Node) Mkdir(ctx context.Context, name string, mode uint32, out *fuse.EntryOut) (*fs.Inode, syscall.Errno) {
 	return nil, 0
 }
 
-func (n *NetSNode) Rmdir(ctx context.Context, name string) syscall.Errno {
+func (n *Node) Rmdir(ctx context.Context, name string) syscall.Errno {
 	return 0
 }
 
-func (n *NetSNode) Unlink(ctx context.Context, name string) syscall.Errno {
+func (n *Node) Unlink(ctx context.Context, name string) syscall.Errno {
 	return 0
 }
 
-func (n *NetSNode) Fsync(ctx context.Context, f fs.FileHandle, flags uint32) syscall.Errno {
+func (n *Node) Fsync(ctx context.Context, f fs.FileHandle, flags uint32) syscall.Errno {
 	return 0
 }*/

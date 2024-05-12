@@ -3,10 +3,11 @@ package cmd
 import (
 	"fmt"
 	"os"
-	"os/signal"
 	"syscall"
 	"time"
 
+	"github.com/bastienvty/netsecfs/internal/db/meta"
+	"github.com/bastienvty/netsecfs/internal/db/object"
 	"github.com/bastienvty/netsecfs/internal/fs"
 	gofs "github.com/hanwen/go-fuse/v2/fs"
 	"github.com/hanwen/go-fuse/v2/fuse"
@@ -24,11 +25,21 @@ var mountCmd = &cobra.Command{
 	Long:      `Mount the filesystem to the specified directory.`,
 	ValidArgs: []string{"username", "password"},
 	Args:      cobra.ExactArgs(1),
-	Example:   "netsecfs mount --storage /path/to/storage --meta /path/to/meta.db --username toto --password titi /tmp/nsfs",
+	Example:   "netsecfs mount --meta /path/to/meta.db --username toto --password titi /tmp/nsfs",
 	Run:       mount,
 }
 
 func mount(cmd *cobra.Command, args []string) {
+	addr, _ := cmd.Flags().GetString("meta")
+	mp := args[0]
+
+	m := meta.RegisterMeta(addr)
+	format, err := m.Load()
+	if err != nil {
+		fmt.Println("Load fail: ", err)
+		return
+	}
+
 	var fuseOpts *gofs.Options
 	sec := time.Second
 	fuseOpts = &gofs.Options{
@@ -37,26 +48,48 @@ func mount(cmd *cobra.Command, args []string) {
 		NegativeTimeout: &sec,
 		AttrTimeout:     &sec,
 		EntryTimeout:    &sec,
+		/*RootStableAttr: &gofs.StableAttr{
+			Ino: uint64(meta.RootInode),
+		},*/
 		//UID:             uint32(os.Getuid()),
 		//GID:             uint32(os.Getgid()),
 	}
 	fuseOpts.MountOptions = fuse.MountOptions{
 		Options: []string{"rw", "default_permissions"},
-		Debug:   true,
+		Debug:   false,
+		Name:    "netsecfs",
 	}
+
+	blob, err := object.CreateStorage(format.Storage)
+	if err != nil {
+		fmt.Println("CreateStorage fail: ", err)
+		return
+	}
+
+	if m != nil {
+		if err = m.Shutdown(); err != nil {
+			logger.Errorf("[pid=%d] meta shutdown: %s", os.Getpid(), err)
+		}
+	}
+	if blob != nil {
+		object.Shutdown(blob)
+	}
+
 	//fuseOpts.MountOptions.Options = append(fuseOpts.MountOptions.Options, "rw")
-	server, err := gofs.Mount(args[0], &fs.NetSNode{}, fuseOpts)
+	syscall.Umask(0000)
+	root := &fs.Node{}
+	server, err := gofs.Mount(mp, root, fuseOpts)
 	if err != nil {
 		fmt.Println("Mount fail: ", err)
 		return
 	}
-	fmt.Println("Unmount or Ctrl+C to stop the server.")
-	c := make(chan os.Signal)
+	fmt.Println("Unmount to stop the server.")
+	/*c := make(chan os.Signal)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 	go func() {
 		<-c
 		server.Unmount()
-	}()
+	}()*/
 
 	server.Wait()
 	fmt.Println("Server exited.")
@@ -64,10 +97,8 @@ func mount(cmd *cobra.Command, args []string) {
 }
 
 func init() {
-	/*initCmd.Flags().StringP("storage", "s", "", "Path to the storage database.")
-	initCmd.Flags().StringP("meta", "m", "", "Path to the meta database.")
-	initCmd.MarkFlagRequired("storage")
-	initCmd.MarkFlagRequired("meta")*/
+	mountCmd.Flags().StringP("meta", "m", "", "Path to the meta database.")
+	mountCmd.MarkFlagRequired("meta")
 
 	mountCmd.Flags().StringVarP(&user, "username", "u", "", "Username")
 	mountCmd.Flags().StringVarP(&pwd, "password", "p", "", "Password")
