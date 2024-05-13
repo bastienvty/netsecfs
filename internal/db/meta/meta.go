@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"runtime"
 	"runtime/debug"
 	"strings"
@@ -345,29 +346,40 @@ func (m *dbMeta) GetAttr(ctx context.Context, inode Ino, attr *Attr) syscall.Err
 	}))
 }
 
-func (m *dbMeta) Lookup(ctx context.Context, parent Ino, name string, inode *Ino, attr *Attr) syscall.Errno {
+func (m *dbMeta) getNode(parent Ino, name string, nn *namedNode) syscall.Errno {
 	return errno(m.roTxn(func(s *xorm.Session) error {
-		s = s.Table(&edge{})
-		nn := namedNode{node: node{Parent: parent}, Name: []byte(name)}
-		var exist bool
-		var err error
-		if attr != nil {
-			s = s.Join("INNER", &node{}, "nsfs_edge.inode=nsfs_node.inode")
-			exist, err = s.Select("nsfs_node.*").Get(&nn)
-		} else {
-			exist, err = s.Select("*").Get(&nn)
-		}
+		var edge = edge{Parent: parent, Name: []byte(name)}
+		exist, err := s.Get(&edge)
 		if err != nil {
+			log.Fatalf("Failed to find nodes: %v", err)
 			return err
-		}
-		if !exist {
+		} else if !exist {
 			return syscall.ENOENT
 		}
-		*inode = nn.Inode
-		m.parseAttr(&nn.node, attr)
-		fmt.Println("LOOKUP", parent, name, inode, attr)
+		var node node
+		exist, err = s.Where("inode = ?", edge.Inode).Get(&node)
+		if err != nil {
+			log.Fatalf("Failed to find nodes: %v", err)
+			return err
+		} else if !exist {
+			return syscall.ENOENT
+		}
+		*nn = namedNode{node: node, Name: []byte(name)}
 		return nil
 	}))
+}
+
+func (m *dbMeta) Lookup(ctx context.Context, parent Ino, name string, inode *Ino, attr *Attr) syscall.Errno {
+	nn := namedNode{}
+	err := m.getNode(parent, name, &nn)
+	if err != 0 {
+		return err
+	}
+	fmt.Println("LOOKUP", nn, string(nn.Name))
+	*inode = nn.Inode
+	m.parseAttr(&nn.node, attr)
+	fmt.Println("LOOKUP", parent, name, inode, attr)
+	return 0
 }
 
 func (m *dbMeta) Mknod(ctx context.Context, parent Ino, name string, _type uint8, mode uint32, inode *Ino, attr *Attr) syscall.Errno {
@@ -457,6 +469,67 @@ func (m *dbMeta) Mknod(ctx context.Context, parent Ino, name string, _type uint8
 		m.parseAttr(&n, attr)
 		return nil
 	}, parent))
+}
+
+func (m *dbMeta) joinNodes(parent Ino, nns *[]namedNode) syscall.Errno {
+	return errno(m.roTxn(func(s *xorm.Session) error {
+		var nodes []node
+		err := s.SQL("SELECT * FROM `nsfs_edge` INNER JOIN `nsfs_node` ON nsfs_edge.inode=nsfs_node.inode WHERE nsfs_edge.parent = ?", parent).Find(&nodes)
+		if err != nil {
+			log.Fatalf("Failed to find nodes: %v", err)
+		}
+		var edges []edge
+		err = s.SQL("SELECT * FROM `nsfs_edge` INNER JOIN `nsfs_node` ON nsfs_edge.inode=nsfs_node.inode WHERE nsfs_edge.parent = ?", parent).Find(&edges)
+		if err != nil {
+			log.Fatalf("Failed to find edges: %v", err)
+		}
+		if len(nodes) != len(edges) {
+			log.Fatalf("Nodes and edges are not equal: %d %d", len(nodes), len(edges))
+		}
+		for _, n := range nodes {
+			nn := namedNode{node: n}
+			for _, e := range edges {
+				if e.Inode == n.Inode {
+					nn.Name = e.Name
+					break
+				}
+			}
+			*nns = append(*nns, nn)
+		}
+		return nil
+	}))
+}
+
+func (m *dbMeta) Readdir(ctx context.Context, inode Ino, plus uint8, entries *[]*Entry) syscall.Errno {
+	/*s = s.Table(&edge{})
+	if plus != 0 {
+		s = s.Join("INNER", &node{}, "nsfs_edge.inode=nsfs_node.inode")
+	}
+	var nodes []namedNode
+	if err := s.Find(&nodes, &edge{Parent: inode}); err != nil {
+		return err
+	}*/
+	// The join does not seem to work properly so doing some "brute force"
+	nodes := make([]namedNode, 0)
+	err := m.joinNodes(inode, &nodes)
+	for _, n := range nodes {
+		if len(n.Name) == 0 {
+			logger.Errorf("Corrupt entry with empty name: inode %d parent %d", n.Inode, inode)
+			continue
+		}
+		entry := &Entry{
+			Inode: n.Inode,
+			Name:  n.Name,
+			Attr:  &Attr{},
+		}
+		if plus != 0 {
+			m.parseAttr(&n.node, entry.Attr)
+		} else {
+			entry.Attr.Typ = n.Type
+		}
+		*entries = append(*entries, entry)
+	}
+	return err
 }
 
 func newSQLMeta(driver, addr string) (Meta, error) {

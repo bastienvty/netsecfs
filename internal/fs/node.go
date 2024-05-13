@@ -52,18 +52,19 @@ var _ = (fs.NodeLookuper)((*Node)(nil))
 var _ = (fs.NodeGetattrer)((*Node)(nil))
 var _ = (fs.NodeStatfser)((*Node)(nil))
 
-// var _ = (fs.NodeOpener)((*Node)(nil))
-/*var _ = (fs.NodeCreater)((*Node)(nil))
-var _ = (fs.NodeRenamer)((*Node)(nil))
+// // var _ = (fs.NodeOpener)((*Node)(nil))
+// var _ = (fs.NodeCreater)((*Node)(nil))
+// var _ = (fs.NodeRenamer)((*Node)(nil))
 
-var _ = (fs.NodeAccesser)((*Node)(nil))
-var _ = (fs.NodeOpendirer)((*Node)(nil))
+// var _ = (fs.NodeAccesser)((*Node)(nil))
+// var _ = (fs.NodeOpendirer)((*Node)(nil))
 var _ = (fs.NodeReaddirer)((*Node)(nil))
-var _ = (fs.NodeMkdirer)((*Node)(nil))
-var _ = (fs.NodeRmdirer)((*Node)(nil))
 
-var _ = (fs.NodeUnlinker)((*Node)(nil)) // vim
-var _ = (fs.NodeFsyncer)((*Node)(nil))  // vim*/
+// var _ = (fs.NodeMkdirer)((*Node)(nil))
+// var _ = (fs.NodeRmdirer)((*Node)(nil))
+
+// var _ = (fs.NodeUnlinker)((*Node)(nil)) // vim
+// var _ = (fs.NodeFsyncer)((*Node)(nil))  // vim
 
 func (n *Node) Lookup(ctx context.Context, name string, out *fuse.EntryOut) (*fs.Inode, syscall.Errno) {
 	if len(name) > maxName {
@@ -71,9 +72,9 @@ func (n *Node) Lookup(ctx context.Context, name string, out *fuse.EntryOut) (*fs
 	}
 	var err syscall.Errno
 	var attr = &meta.Attr{}
-	var inode *meta.Ino
+	var inode meta.Ino
 	ino := meta.Ino(n.StableAttr().Ino)
-	err = n.meta.Lookup(ctx, ino, name, inode, attr)
+	err = n.meta.Lookup(ctx, ino, name, &inode, attr)
 	if err != 0 {
 		return nil, err
 	}
@@ -81,7 +82,7 @@ func (n *Node) Lookup(ctx context.Context, name string, out *fuse.EntryOut) (*fs
 	ops := Node{
 		meta: n.meta,
 	}
-	entry := &meta.Entry{Inode: ino, Attr: attr}
+	entry := &meta.Entry{Inode: inode, Attr: attr}
 	attrToStat(entry.Inode, entry.Attr, &out.Attr)
 	st := fs.StableAttr{
 		Mode: attr.SMode(),
@@ -89,7 +90,7 @@ func (n *Node) Lookup(ctx context.Context, name string, out *fuse.EntryOut) (*fs
 		// Gen:  1,
 	}
 	newNode := n.NewInode(ctx, &ops, st)
-	fmt.Println("NewNode in lookup", newNode)
+	// fmt.Println("NewNode in lookup", newNode, inode, attr)
 	return newNode, 0
 }
 
@@ -208,9 +209,71 @@ func (n *Node) Opendir(ctx context.Context) syscall.Errno {
 	return 0
 }*/
 
-// func (n *Node) Readdir(ctx context.Context) (fs.DirStream, syscall.Errno) {
-// 	return nil, 0
-// }
+func (n *Node) Readdir(ctx context.Context) (fs.DirStream, syscall.Errno) {
+	var attr meta.Attr
+	var entries []*meta.Entry
+	result := make([]fuse.DirEntry, 0)
+	inode := meta.Ino(n.StableAttr().Ino)
+	if err := n.meta.GetAttr(ctx, inode, &attr); err != 0 {
+		return nil, err
+	}
+	/*var mmask uint8 = MODE_MASK_R
+	if plus != 0 {
+		mmask |= MODE_MASK_X
+	}
+	if st := m.Access(ctx, inode, mmask, &attr); st != 0 {
+		return st
+	}*/
+	if inode == meta.RootInode {
+		attr.Parent = meta.RootInode
+	}
+	entries = []*meta.Entry{
+		{
+			Inode: inode,
+			Name:  []byte("."),
+			Attr:  &meta.Attr{Typ: meta.TypeDirectory},
+		},
+	}
+	entries = append(entries, &meta.Entry{
+		Inode: attr.Parent,
+		Name:  []byte(".."),
+		Attr:  &meta.Attr{Typ: meta.TypeDirectory},
+	})
+	st := n.meta.Readdir(ctx, inode, 1, &entries)
+	var de fuse.DirEntry
+	for _, e := range entries {
+		// fmt.Println("READDIR ENTRY:", e, string(e.Name))
+		de.Ino = uint64(e.Inode)
+		de.Name = string(e.Name)
+		de.Mode = e.Attr.SMode()
+		result = append(result, de)
+	}
+	fmt.Println("READDIR RESULT:", result)
+	return fs.NewListDirStream(result), st
+}
+
+/*func (n *NanaNode) Readdir(ctx context.Context) (fs.DirStream, syscall.Errno) {
+	defer trace.StartRegion(ctx, "fs.node.Readdir").End()
+	defer logOperationLatency("entry_read_dir", time.Now())
+	result := make([]fuse.DirEntry, 0)
+	children, err := n.R.ListEntryChildren(ctx, n.entryID)
+	if err != nil {
+		return nil, Error2FuseSysError("entry_read_dir", types.ErrNoGroup)
+	}
+
+	for i := range children {
+		ch := children[i]
+		node, _ := n.R.newFsNode(ctx, n, ch)
+		n.AddChild(ch.Name, node.EmbeddedInode(), false)
+
+		result = append(result, fuse.DirEntry{
+			Mode: node.Mode(),
+			Name: ch.Name,
+			Ino:  node.StableAttr().Ino,
+		})
+	}
+	return fs.NewListDirStream(result), NoErr
+}*/
 
 /*func (n *Node) Mkdir(ctx context.Context, name string, mode uint32, out *fuse.EntryOut) (*fs.Inode, syscall.Errno) {
 	return nil, 0

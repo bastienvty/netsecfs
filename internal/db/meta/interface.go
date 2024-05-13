@@ -170,7 +170,7 @@ type Meta interface {
 	// For Hadoop, the target should not be overwritten.
 	// doRename(ctx context.Context, parentSrc Ino, nameSrc string, parentDst Ino, nameDst string, flags uint32, inode *Ino, attr *Attr) syscall.Errno
 	// Readdir returns all entries for given directory, which include attributes if plus is true.
-	// doReaddir(ctx context.Context, inode Ino, wantattr uint8, entries *[]*Entry) syscall.Errno
+	Readdir(ctx context.Context, inode Ino, wantattr uint8, entries *[]*Entry) syscall.Errno
 	// Create creates a file in a directory with given name.
 	// Create(ctx context.Context, parent Ino, name string, mode uint16, cumask uint16, flags uint32, inode *Ino, attr *Attr) syscall.Errno
 	Mknod(ctx context.Context, parent Ino, name string, _type uint8, mode uint32, inode *Ino, attr *Attr) syscall.Errno
