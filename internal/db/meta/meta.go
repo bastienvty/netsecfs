@@ -375,10 +375,8 @@ func (m *dbMeta) Lookup(ctx context.Context, parent Ino, name string, inode *Ino
 	if err != 0 {
 		return err
 	}
-	fmt.Println("LOOKUP", nn, string(nn.Name))
 	*inode = nn.Inode
 	m.parseAttr(&nn.node, attr)
-	fmt.Println("LOOKUP", parent, name, inode, attr)
 	return 0
 }
 

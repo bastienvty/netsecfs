@@ -60,7 +60,8 @@ var _ = (fs.NodeStatfser)((*Node)(nil))
 // var _ = (fs.NodeOpendirer)((*Node)(nil))
 var _ = (fs.NodeReaddirer)((*Node)(nil))
 
-// var _ = (fs.NodeMkdirer)((*Node)(nil))
+var _ = (fs.NodeMkdirer)((*Node)(nil))
+
 // var _ = (fs.NodeRmdirer)((*Node)(nil))
 
 // var _ = (fs.NodeUnlinker)((*Node)(nil)) // vim
@@ -252,34 +253,38 @@ func (n *Node) Readdir(ctx context.Context) (fs.DirStream, syscall.Errno) {
 	return fs.NewListDirStream(result), st
 }
 
-/*func (n *NanaNode) Readdir(ctx context.Context) (fs.DirStream, syscall.Errno) {
-	defer trace.StartRegion(ctx, "fs.node.Readdir").End()
-	defer logOperationLatency("entry_read_dir", time.Now())
-	result := make([]fuse.DirEntry, 0)
-	children, err := n.R.ListEntryChildren(ctx, n.entryID)
-	if err != nil {
-		return nil, Error2FuseSysError("entry_read_dir", types.ErrNoGroup)
+func (n *Node) Mkdir(ctx context.Context, name string, mode uint32, out *fuse.EntryOut) (node *fs.Inode, errno syscall.Errno) {
+	if len(name) > maxName {
+		return nil, syscall.ENAMETOOLONG
 	}
-
-	for i := range children {
-		ch := children[i]
-		node, _ := n.R.newFsNode(ctx, n, ch)
-		n.AddChild(ch.Name, node.EmbeddedInode(), false)
-
-		result = append(result, fuse.DirEntry{
-			Mode: node.Mode(),
-			Name: ch.Name,
-			Ino:  node.StableAttr().Ino,
-		})
+	if n.GetChild(name) != nil {
+		return nil, syscall.EEXIST
 	}
-	return fs.NewListDirStream(result), NoErr
-}*/
-
-/*func (n *Node) Mkdir(ctx context.Context, name string, mode uint32, out *fuse.EntryOut) (*fs.Inode, syscall.Errno) {
-	return nil, 0
+	attr := &meta.Attr{}
+	parent := meta.Ino(n.StableAttr().Ino)
+	var ino meta.Ino
+	n.meta.GetNextInode(ctx, &ino)
+	err := n.meta.Mknod(ctx, parent, name, meta.TypeDirectory, mode, &ino, attr)
+	if err != 0 {
+		return nil, err
+	}
+	// v.UpdateLength(inode, attr)
+	entry := &meta.Entry{Inode: ino, Attr: attr}
+	attrToStat(entry.Inode, entry.Attr, &out.Attr)
+	ops := Node{
+		meta: n.meta,
+	}
+	st := fs.StableAttr{
+		Mode: attr.SMode(),
+		Ino:  uint64(entry.Inode),
+		// Gen:  1,
+	}
+	node = n.NewInode(ctx, &ops, st)
+	n.AddChild(name, node, true)
+	return node, 0
 }
 
-func (n *Node) Rmdir(ctx context.Context, name string) syscall.Errno {
+/*func (n *Node) Rmdir(ctx context.Context, name string) syscall.Errno {
 	return 0
 }
 
