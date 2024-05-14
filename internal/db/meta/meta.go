@@ -619,7 +619,7 @@ func (m *dbMeta) Readdir(ctx context.Context, inode Ino, plus uint8, entries *[]
 	return err
 }
 
-func (m *dbMeta) Rmdir(ctx context.Context, parent Ino, name string, inode *Ino) syscall.Errno {
+func (m *dbMeta) Rmdir(ctx context.Context, parent Ino, name string) syscall.Errno {
 	return errno(m.txn(func(s *xorm.Session) error {
 		var pn = node{Inode: parent}
 		ok, err := s.Get(&pn)
@@ -647,9 +647,6 @@ func (m *dbMeta) Rmdir(ctx context.Context, parent Ino, name string, inode *Ino)
 		}
 		if e.Type != TypeDirectory {
 			return syscall.ENOTDIR
-		}
-		if inode != nil {
-			*inode = e.Inode
 		}
 		var n = node{Inode: e.Inode}
 		ok, err = s.Get(&n)
@@ -686,6 +683,80 @@ func (m *dbMeta) Rmdir(ctx context.Context, parent Ino, name string, inode *Ino)
 		}
 
 		_, err = s.Cols("nlink", "mtime", "ctime", "mtimensec", "ctimensec").Update(&pn, &node{Inode: pn.Inode})
+		return err
+	}, parent))
+}
+
+func (m *dbMeta) Unlink(ctx context.Context, parent Ino, name string) syscall.Errno {
+	return errno(m.txn(func(s *xorm.Session) error {
+		var n node
+		var pn = node{Inode: parent}
+		ok, err := s.Get(&pn)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return syscall.ENOENT
+		}
+		if pn.Type != TypeDirectory {
+			return syscall.ENOTDIR
+		}
+		/*var pattr Attr
+		m.parseAttr(&pn, &pattr)
+		if st := m.Access(ctx, parent, MODE_MASK_W|MODE_MASK_X, &pattr); st != 0 {
+			return st
+		}*/
+		var e = edge{Parent: parent, Name: []byte(name)}
+		ok, err = s.Get(&e)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return syscall.ENOENT
+		}
+		if e.Type == TypeDirectory {
+			return syscall.EPERM
+		}
+
+		n = node{Inode: e.Inode}
+		ok, err = s.Get(&n)
+		if err != nil {
+			return err
+		}
+		now := time.Now().UnixNano()
+		if ok {
+			n.Ctime = now / 1e3
+			n.Ctimensec = int16(now % 1e3)
+			n.Nlink--
+		} else {
+			logger.Warnf("no attribute for inode %d (%d, %s)", e.Inode, parent, name)
+		}
+
+		var updateParent bool
+		if time.Duration(now-pn.Mtime*1e3-int64(pn.Mtimensec)) >= SkipDirMtime {
+			pn.Mtime = now / 1e3
+			pn.Ctime = now / 1e3
+			pn.Mtimensec = int16(now % 1e3)
+			pn.Ctimensec = int16(now % 1e3)
+			updateParent = true
+		}
+
+		if _, err := s.Delete(&edge{Parent: parent, Name: e.Name}); err != nil {
+			return err
+		}
+		if _, err := s.Delete(&node{Inode: e.Inode}); err != nil {
+			return err
+		}
+		if updateParent {
+			if _, err = s.Cols("mtime", "ctime", "mtimensec", "ctimensec").Update(&pn, &node{Inode: pn.Inode}); err != nil {
+				return err
+			}
+		}
+		if n.Nlink > 0 {
+			if _, err := s.Cols("nlink", "ctime", "ctimensec", "parent").Update(&n, &node{Inode: e.Inode}); err != nil {
+				return err
+			}
+		}
 		return err
 	}, parent))
 }

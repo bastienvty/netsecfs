@@ -64,7 +64,7 @@ var _ = (fs.NodeReaddirer)((*Node)(nil))
 var _ = (fs.NodeMkdirer)((*Node)(nil))
 var _ = (fs.NodeRmdirer)((*Node)(nil))
 
-// var _ = (fs.NodeUnlinker)((*Node)(nil)) // vim
+var _ = (fs.NodeUnlinker)((*Node)(nil)) // vim
 // var _ = (fs.NodeFsyncer)((*Node)(nil))  // vim
 
 func (n *Node) Lookup(ctx context.Context, name string, out *fuse.EntryOut) (*fs.Inode, syscall.Errno) {
@@ -204,7 +204,7 @@ func (n *Node) Create(ctx context.Context, name string, flags uint32, mode uint3
 		// Gen:  1,
 	}
 	node = n.NewInode(ctx, &ops, st)
-	n.AddChild(name, node, true)
+	// n.AddChild(name, node, true) // done by default?
 	// fmt.Println("Create", ino, name)
 	// fmt.Println("NewNode in create", node)
 	// fmt.Println("Parent node", n)
@@ -295,7 +295,7 @@ func (n *Node) Mkdir(ctx context.Context, name string, mode uint32, out *fuse.En
 		// Gen:  1,
 	}
 	node = n.NewInode(ctx, &ops, st)
-	n.AddChild(name, node, true)
+	// n.AddChild(name, node, true)
 	return node, 0
 }
 
@@ -311,18 +311,23 @@ func (n *Node) Rmdir(ctx context.Context, name string) syscall.Errno {
 	}
 	parent := meta.Ino(n.StableAttr().Ino)
 	// node := n.GetChild(name)
-	var inode meta.Ino
-	err := n.meta.Rmdir(ctx, parent, name, &inode)
-	if err == 0 {
+	err := n.meta.Rmdir(ctx, parent, name)
+	// seems to be done by default
+	/*if err == 0 {
 		n.RmChild(name)
-	}
+	}*/
 	return err
 }
 
-/*func (n *Node) Unlink(ctx context.Context, name string) syscall.Errno {
-	return 0
+func (n *Node) Unlink(ctx context.Context, name string) syscall.Errno {
+	if len(name) > maxName {
+		return syscall.ENAMETOOLONG
+	}
+	parent := meta.Ino(n.StableAttr().Ino)
+	err := n.meta.Unlink(ctx, parent, name)
+	return err
 }
 
-func (n *Node) Fsync(ctx context.Context, f fs.FileHandle, flags uint32) syscall.Errno {
+/*func (n *Node) Fsync(ctx context.Context, f fs.FileHandle, flags uint32) syscall.Errno {
 	return 0
 }*/
