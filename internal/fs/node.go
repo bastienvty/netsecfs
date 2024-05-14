@@ -264,7 +264,7 @@ func (n *Node) Readdir(ctx context.Context) (fs.DirStream, syscall.Errno) {
 		de.Mode = e.Attr.SMode()
 		result = append(result, de)
 	}
-	fmt.Println("READDIR RESULT:", result)
+	// fmt.Println("READDIR RESULT:", result)
 	return fs.NewListDirStream(result), st
 }
 
@@ -303,6 +303,7 @@ func (n *Node) Rmdir(ctx context.Context, name string) syscall.Errno {
 	if len(name) > maxName {
 		return syscall.ENAMETOOLONG
 	}
+	fmt.Println("Rmdir", n, name)
 	return 0
 }
 

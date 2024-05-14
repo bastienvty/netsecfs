@@ -43,4 +43,5 @@ func init() {
 
 	rootCmd.AddCommand(initCmd)
 	rootCmd.AddCommand(mountCmd)
+	rootCmd.AddCommand(shareCmd)
 }
