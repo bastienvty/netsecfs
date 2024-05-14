@@ -166,7 +166,7 @@ type Meta interface {
 	// The file will be deleted if it's not linked by any entries and not open by any sessions.
 	// doUnlink(ctx context.Context, parent Ino, name string, skipCheckTrash ...bool) syscall.Errno
 	// Rmdir removes an empty sub-directory.
-	// doRmdir(ctx context.Context, parent Ino, name string, skipCheckTrash ...bool) syscall.Errno
+	Rmdir(ctx context.Context, parent Ino, name string, inode *Ino) syscall.Errno
 	// Rename move an entry from a source directory to another with given name.
 	// The targeted entry will be overwrited if it's a file or empty directory.
 	// For Hadoop, the target should not be overwritten.

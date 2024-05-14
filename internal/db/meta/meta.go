@@ -619,6 +619,77 @@ func (m *dbMeta) Readdir(ctx context.Context, inode Ino, plus uint8, entries *[]
 	return err
 }
 
+func (m *dbMeta) Rmdir(ctx context.Context, parent Ino, name string, inode *Ino) syscall.Errno {
+	return errno(m.txn(func(s *xorm.Session) error {
+		var pn = node{Inode: parent}
+		ok, err := s.Get(&pn)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return syscall.ENOENT
+		}
+		if pn.Type != TypeDirectory {
+			return syscall.ENOTDIR
+		}
+		var pattr Attr
+		m.parseAttr(&pn, &pattr)
+		/*if st := m.Access(ctx, parent, MODE_MASK_W|MODE_MASK_X, &pattr); st != 0 {
+			return st
+		}*/
+		var e = edge{Parent: parent, Name: []byte(name)}
+		ok, err = s.Get(&e)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return syscall.ENOENT
+		}
+		if e.Type != TypeDirectory {
+			return syscall.ENOTDIR
+		}
+		if inode != nil {
+			*inode = e.Inode
+		}
+		var n = node{Inode: e.Inode}
+		ok, err = s.Get(&n)
+		if err != nil {
+			return err
+		}
+		exist, err := s.Exist(&edge{Parent: e.Inode})
+		if err != nil {
+			return err
+		}
+		if exist {
+			return syscall.ENOTEMPTY
+		}
+		now := time.Now().UnixNano()
+		if ok {
+			/*if ctx.Uid() != 0 && pn.Mode&01000 != 0 && ctx.Uid() != pn.Uid && ctx.Uid() != n.Uid {
+				return syscall.EACCES
+			}*/
+		} else {
+			logger.Warnf("no attribute for inode %d (%d, %s)", e.Inode, parent, name)
+		}
+		pn.Nlink--
+		pn.Mtime = now / 1e3
+		pn.Ctime = now / 1e3
+		pn.Mtimensec = int16(now % 1e3)
+		pn.Ctimensec = int16(now % 1e3)
+
+		if _, err := s.Delete(&edge{Parent: parent, Name: e.Name}); err != nil {
+			return err
+		}
+
+		if _, err := s.Delete(&node{Inode: e.Inode}); err != nil {
+			return err
+		}
+
+		_, err = s.Cols("nlink", "mtime", "ctime", "mtimensec", "ctimensec").Update(&pn, &node{Inode: pn.Inode})
+		return err
+	}, parent))
+}
+
 func newSQLMeta(driver, addr string) (Meta, error) {
 	engine, err := xorm.NewEngine(driver, addr)
 	if err != nil {

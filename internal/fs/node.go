@@ -303,8 +303,20 @@ func (n *Node) Rmdir(ctx context.Context, name string) syscall.Errno {
 	if len(name) > maxName {
 		return syscall.ENAMETOOLONG
 	}
-	fmt.Println("Rmdir", n, name)
-	return 0
+	if name == "." {
+		return syscall.EINVAL
+	}
+	if name == ".." {
+		return syscall.ENOTEMPTY
+	}
+	parent := meta.Ino(n.StableAttr().Ino)
+	// node := n.GetChild(name)
+	var inode meta.Ino
+	err := n.meta.Rmdir(ctx, parent, name, &inode)
+	if err == 0 {
+		n.RmChild(name)
+	}
+	return err
 }
 
 /*func (n *Node) Unlink(ctx context.Context, name string) syscall.Errno {
