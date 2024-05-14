@@ -52,6 +52,8 @@ var _ = (fs.NodeLookuper)((*Node)(nil))
 var _ = (fs.NodeGetattrer)((*Node)(nil))
 var _ = (fs.NodeStatfser)((*Node)(nil))
 
+// var _ = (fs.NodeSetattrer)((*Node)(nil))
+
 // // var _ = (fs.NodeOpener)((*Node)(nil))
 // var _ = (fs.NodeCreater)((*Node)(nil))
 // var _ = (fs.NodeRenamer)((*Node)(nil))
@@ -59,10 +61,8 @@ var _ = (fs.NodeStatfser)((*Node)(nil))
 // var _ = (fs.NodeAccesser)((*Node)(nil))
 // var _ = (fs.NodeOpendirer)((*Node)(nil))
 var _ = (fs.NodeReaddirer)((*Node)(nil))
-
 var _ = (fs.NodeMkdirer)((*Node)(nil))
-
-// var _ = (fs.NodeRmdirer)((*Node)(nil))
+var _ = (fs.NodeRmdirer)((*Node)(nil))
 
 // var _ = (fs.NodeUnlinker)((*Node)(nil)) // vim
 // var _ = (fs.NodeFsyncer)((*Node)(nil))  // vim
@@ -79,7 +79,6 @@ func (n *Node) Lookup(ctx context.Context, name string, out *fuse.EntryOut) (*fs
 	if err != 0 {
 		return nil, err
 	}
-	fmt.Println("LOOKUP", ino, name, inode, attr)
 	ops := Node{
 		meta: n.meta,
 	}
@@ -152,6 +151,22 @@ func (n *Node) Statfs(ctx context.Context, out *fuse.StatfsOut) syscall.Errno {
 	out.NameLen = 255                               // Maximum file name length?
 	out.Frsize = fileBlockSize                      // Fragment size, smallest addressable data size in the file system.
 	return 0
+}
+
+func (n *Node) Setattr(ctx context.Context, f fs.FileHandle, in *fuse.SetAttrIn, out *fuse.AttrOut) syscall.Errno {
+	if f != nil {
+		return f.(fs.FileSetattrer).Setattr(ctx, in, out)
+	}
+	fmt.Println("SetAttr", n, in)
+	var err syscall.Errno
+	var attr = &meta.Attr{}
+	ino := meta.Ino(n.StableAttr().Ino)
+	err = n.meta.SetAttr(ctx, ino, in, attr)
+	if err == 0 {
+		entry := &meta.Entry{Inode: ino, Attr: attr}
+		attrToStat(entry.Inode, entry.Attr, &out.Attr)
+	}
+	return err
 }
 
 /*func (n *Node) Access(ctx context.Context, mask uint32) syscall.Errno {
@@ -284,11 +299,14 @@ func (n *Node) Mkdir(ctx context.Context, name string, mode uint32, out *fuse.En
 	return node, 0
 }
 
-/*func (n *Node) Rmdir(ctx context.Context, name string) syscall.Errno {
+func (n *Node) Rmdir(ctx context.Context, name string) syscall.Errno {
+	if len(name) > maxName {
+		return syscall.ENAMETOOLONG
+	}
 	return 0
 }
 
-func (n *Node) Unlink(ctx context.Context, name string) syscall.Errno {
+/*func (n *Node) Unlink(ctx context.Context, name string) syscall.Errno {
 	return 0
 }
 

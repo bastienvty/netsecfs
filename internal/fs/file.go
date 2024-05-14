@@ -1,9 +1,7 @@
 package fs
 
 import (
-	"os"
 	"sync"
-	"syscall"
 
 	"github.com/bastienvty/netsecfs/internal/db/meta"
 	"github.com/hanwen/go-fuse/v2/fs"
@@ -18,9 +16,11 @@ import (
 // gocryptfs
 
 type FileHandle struct {
-	ino meta.Ino
-	mu  sync.Mutex
-	fd  *os.File
+	node *Node
+	meta meta.Meta
+	// ino meta.Ino
+	mu sync.Mutex
+	// fd  *os.File
 }
 
 var _ fs.FileHandle = (*FileHandle)(nil)
@@ -32,7 +32,7 @@ var _ fs.FileHandle = (*FileHandle)(nil)
 // var _ = (fs.FileReleaser)((*File)(nil))
 // var _ = (fs.FileFsyncer)((*File)(nil))
 
-func newFileHandle(ino meta.Ino, name string) (fh *FileHandle, errno syscall.Errno) {
+/*func newFileHandle(ino meta.Ino, name string) (fh *FileHandle, errno syscall.Errno) {
 	st := &syscall.Stat_t{}
 	if err := syscall.Fstat(int(ino), st); err != nil {
 		errno = fs.ToErrno(err)
@@ -41,13 +41,10 @@ func newFileHandle(ino meta.Ino, name string) (fh *FileHandle, errno syscall.Err
 
 	osFile := os.NewFile(uintptr(ino), name)
 
-	fh = &FileHandle{
-		ino: ino,
-		fd:  osFile,
-	}
+	fh = &FileHandle{}
 
 	return fh, 0
-}
+}*/
 
 /*func (f *NSFile) Getattr(ctx context.Context, out *fuse.AttrOut) syscall.Errno {
 	return 0

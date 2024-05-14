@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/bastienvty/netsecfs/utils"
+	"github.com/hanwen/go-fuse/v2/fuse"
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/pkg/errors"
 	"xorm.io/xorm"
@@ -344,6 +345,94 @@ func (m *dbMeta) GetAttr(ctx context.Context, inode Ino, attr *Attr) syscall.Err
 		m.parseAttr(&n, attr)
 		return nil
 	}))
+}
+
+func (m *dbMeta) SetAttr(ctx context.Context, inode Ino, in *fuse.SetAttrIn, attr *Attr) syscall.Errno {
+	return errno(m.txn(func(s *xorm.Session) error {
+		var cur = node{Inode: inode}
+		ok, err := s.Get(&cur)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return syscall.ENOENT
+		}
+		var curAttr Attr
+		m.parseAttr(&cur, &curAttr)
+		now := time.Now()
+
+		set := uint16(in.Valid)
+		dirtyAttr, st := m.mergeAttr(ctx, inode, set, &curAttr, attr, now)
+		if st != 0 {
+			return st
+		}
+		if dirtyAttr == nil {
+			return nil
+		}
+
+		var dirtyNode node
+		m.parseNode(dirtyAttr, &dirtyNode)
+		dirtyNode.Ctime = now.UnixNano() / 1e3
+		dirtyNode.Ctimensec = int16(now.Nanosecond() % 1000)
+		_, err = s.Cols("flags", "mode", "atime", "mtime", "ctime",
+			"atimensec", "mtimensec", "ctimensec").
+			Update(&dirtyNode, &node{Inode: inode})
+		if err == nil {
+			m.parseAttr(&dirtyNode, attr)
+		}
+		return err
+	}, inode))
+}
+
+func (m *dbMeta) mergeAttr(ctx context.Context, inode Ino, set uint16, cur, attr *Attr, now time.Time) (*Attr, syscall.Errno) {
+	// do not allow to change uid, gid or mode. Only meta attributes of time can be changed.
+	dirtyAttr := *cur
+	var uid uint32
+	if fuseCtx, ok := ctx.(*fuse.Context); ok {
+		uid = fuseCtx.Uid
+	}
+	var changed bool
+	if set&SetAttrAtimeNow != 0 || (set&SetAttrAtime) != 0 && attr.Atime < 0 {
+		/*if st := m.Access(ctx, inode, MODE_MASK_W, cur); ctx.Uid() != cur.Uid && st != 0 {
+			return nil, syscall.EACCES
+		}*/
+		dirtyAttr.Atime = now.Unix()
+		dirtyAttr.Atimensec = uint32(now.Nanosecond())
+		changed = true
+	} else if set&SetAttrAtime != 0 && (cur.Atime != attr.Atime || cur.Atimensec != attr.Atimensec) {
+		if uid == 0 {
+			return nil, syscall.EPERM
+		}
+		/*if st := m.Access(ctx, inode, MODE_MASK_W, cur); ctx.Uid() != cur.Uid && st != 0 {
+			return nil, syscall.EACCES
+		}*/
+		dirtyAttr.Atime = attr.Atime
+		dirtyAttr.Atimensec = attr.Atimensec
+		changed = true
+	}
+	if set&SetAttrMtimeNow != 0 || (set&SetAttrMtime) != 0 && attr.Mtime < 0 {
+		/*if st := m.Access(ctx, inode, MODE_MASK_W, cur); ctx.Uid() != cur.Uid && st != 0 {
+			return nil, syscall.EACCES
+		}*/
+		dirtyAttr.Mtime = now.Unix()
+		dirtyAttr.Mtimensec = uint32(now.Nanosecond())
+		changed = true
+	} else if set&SetAttrMtime != 0 && (cur.Mtime != attr.Mtime || cur.Mtimensec != attr.Mtimensec) {
+		if uid == 0 {
+			return nil, syscall.EPERM
+		}
+		/*if st := m.Access(ctx, inode, MODE_MASK_W, cur); ctx.Uid() != cur.Uid && st != 0 {
+			return nil, syscall.EACCES
+		}*/
+		dirtyAttr.Mtime = attr.Mtime
+		dirtyAttr.Mtimensec = attr.Mtimensec
+		changed = true
+	}
+	if !changed {
+		*attr = *cur
+		return nil, 0
+	}
+	return &dirtyAttr, 0
 }
 
 func (m *dbMeta) getNode(parent Ino, name string, nn *namedNode) syscall.Errno {

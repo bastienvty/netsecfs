@@ -21,6 +21,8 @@ import (
 	"strconv"
 	"syscall"
 	"time"
+
+	"github.com/hanwen/go-fuse/v2/fuse"
 )
 
 const (
@@ -77,8 +79,6 @@ const CDATA = 0xFF     // 4 bytes: data length
 type Attr struct {
 	Typ       uint8  // type of a node
 	Mode      uint16 // permission mode
-	Uid       uint32 // owner id
-	Gid       uint32 // group id of owner
 	Rdev      uint32 // device number
 	Atime     int64  // last access time
 	Mtime     int64  // last modified time
@@ -157,6 +157,8 @@ type Meta interface {
 	Lookup(ctx context.Context, parent Ino, name string, inode *Ino, attr *Attr) syscall.Errno
 	// GetAttr returns the attributes for given node.
 	GetAttr(ctx context.Context, inode Ino, attr *Attr) syscall.Errno
+	// SetAttr updates the attributes for given node.
+	SetAttr(ctx context.Context, inode Ino, in *fuse.SetAttrIn, attr *Attr) syscall.Errno
 	// doMknod(ctx context.Context, parent Ino, name string, _type uint8, mode uint16, cumask uint16, rdev uint32, path string, inode *Ino, attr *Attr) syscall.Errno
 	// Mkdir creates a sub-directory with given name and mode.
 	// doMkdir(ctx context.Context, parent Ino, name string, mode uint16, cumask uint16, copysgid uint8, inode *Ino, attr *Attr) syscall.Errno
