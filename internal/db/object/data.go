@@ -1,7 +1,9 @@
 package object
 
 import (
+	"errors"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -21,11 +23,50 @@ func (s *dbData) String() string {
 }
 
 type blob struct {
-	Id       int64     `xorm:"pk bigserial"`
-	Key      []byte    `xorm:"notnull unique(blob) varbinary(255) "`
+	Inode uint64 `xorm:"pk"`
+	//Key      []byte    `xorm:"notnull unique(blob) varbinary(255) "`
 	Size     int64     `xorm:"notnull"`
 	Modified time.Time `xorm:"notnull updated"`
 	Data     []byte    `xorm:"mediumblob"`
+}
+
+func (s *dbData) Get(inode uint64, key string, off int64) ([]byte, error) {
+	var b = blob{Inode: inode}
+	ok, err := s.db.Get(&b)
+	if err != nil {
+		return nil, err
+	}
+	if !ok {
+		return nil, os.ErrNotExist
+	}
+	if off > int64(len(b.Data)) {
+		off = int64(len(b.Data))
+	}
+	data := b.Data[off:]
+	return data, nil
+}
+
+func (s *dbData) Put(inode uint64, key string, data []byte) error {
+	now := time.Now()
+	// Key: []byte(key)
+	b := blob{Inode: inode, Data: data, Size: int64(len(data)), Modified: now}
+	n, err := s.db.Insert(&b)
+	fmt.Println("BLOB:", b)
+	if err != nil || n == 0 {
+		n, err = s.db.Update(&b, &blob{Inode: inode})
+	}
+	if err == nil && n == 0 {
+		err = errors.New("not inserted or updated")
+	}
+	return err
+}
+
+func (s *dbData) Delete(inode uint64, key string) error {
+	_, err := s.db.Delete(&blob{Inode: inode})
+	if err == nil {
+		err = os.ErrNotExist
+	}
+	return err
 }
 
 func newSQLStore(driver, addr string) (ObjectStorage, error) {

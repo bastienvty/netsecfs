@@ -38,13 +38,11 @@ type ObjectStorage interface {
 	// Description of the object storage.
 	String() string
 	// Get the data for the given object specified by key.
-	/*Get(key string, off, limit int64, getters ...AttrGetter) (io.ReadCloser, error)
+	Get(inode uint64, key string, off int64) ([]byte, error)
 	// Put data read from a reader to an object specified by key.
-	Put(key string, in io.Reader, getters ...AttrGetter) error
-	// Copy an object from src to dst.
-	Copy(dst, src string) error
+	Put(inode uint64, key string, data []byte) error
 	// Delete a object.
-	Delete(key string, getters ...AttrGetter) error*/
+	Delete(inode uint64, key string) error
 }
 
 type Shutdownable interface {

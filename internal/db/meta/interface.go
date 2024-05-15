@@ -159,9 +159,6 @@ type Meta interface {
 	GetAttr(ctx context.Context, inode Ino, attr *Attr) syscall.Errno
 	// SetAttr updates the attributes for given node.
 	SetAttr(ctx context.Context, inode Ino, in *fuse.SetAttrIn, attr *Attr) syscall.Errno
-	// doMknod(ctx context.Context, parent Ino, name string, _type uint8, mode uint16, cumask uint16, rdev uint32, path string, inode *Ino, attr *Attr) syscall.Errno
-	// Mkdir creates a sub-directory with given name and mode.
-	// doMkdir(ctx context.Context, parent Ino, name string, mode uint16, cumask uint16, copysgid uint8, inode *Ino, attr *Attr) syscall.Errno
 	// Unlink removes a file entry from a directory.
 	// The file will be deleted if it's not linked by any entries and not open by any sessions.
 	Unlink(ctx context.Context, parent Ino, name string) syscall.Errno
@@ -183,7 +180,7 @@ type Meta interface {
 	// Read returns the list of slices on the given chunk.
 	// doRead(ctx context.Context, inode Ino, indx uint32, slices *[]Slice) syscall.Errno
 	// Write put a slice of data on top of the given chunk.
-	// doWrite(ctx context.Context, inode Ino, indx uint32, off uint32, slice Slice, mtime time.Time) syscall.Errno
+	Write(ctx context.Context, inode uint64, data []byte, off int64) syscall.Errno
 }
 
 func RegisterMeta(addr string) Meta {

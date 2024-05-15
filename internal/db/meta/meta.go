@@ -761,6 +761,32 @@ func (m *dbMeta) Unlink(ctx context.Context, parent Ino, name string) syscall.Er
 	}, parent))
 }
 
+func (m *dbMeta) Write(ctx context.Context, inode uint64, data []byte, off int64) syscall.Errno {
+	ino := Ino(inode)
+	return errno(m.txn(func(s *xorm.Session) error {
+		nodeAttr := node{Inode: ino}
+		ok, err := s.Get(&nodeAttr)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return syscall.ENOENT
+		}
+		if nodeAttr.Type != TypeFile {
+			return syscall.EPERM
+		}
+		fmt.Println("nodeAttr", nodeAttr)
+		newleng := uint64(len(data)) + uint64(off)
+		nodeAttr.Length = newleng
+		now := time.Now()
+		nodeAttr.Mtime = now.UnixNano() / 1e3
+		nodeAttr.Mtimensec = int16(now.Nanosecond() % 1e3)
+
+		_, err = s.Cols("length", "mtime", "mtimensec").Update(&nodeAttr, &node{Inode: ino})
+		return err
+	}, ino))
+}
+
 func newSQLMeta(driver, addr string) (Meta, error) {
 	engine, err := xorm.NewEngine(driver, addr)
 	if err != nil {

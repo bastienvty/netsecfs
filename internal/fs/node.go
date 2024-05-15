@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/bastienvty/netsecfs/internal/db/meta"
+	"github.com/bastienvty/netsecfs/internal/db/object"
 	"github.com/hanwen/go-fuse/v2/fs"
 	"github.com/hanwen/go-fuse/v2/fuse"
 )
@@ -36,10 +37,14 @@ const (
 type Node struct {
 	fs.Inode
 	meta meta.Meta
+	obj  object.ObjectStorage
 }
 
-func NewNode(meta meta.Meta) *Node {
-	return &Node{meta: meta}
+func NewNode(meta meta.Meta, obj object.ObjectStorage) *Node {
+	return &Node{
+		meta: meta,
+		obj:  obj,
+	}
 }
 
 func (n *Node) isRoot() bool {
@@ -54,8 +59,10 @@ var _ = (fs.NodeStatfser)((*Node)(nil))
 
 // var _ = (fs.NodeSetattrer)((*Node)(nil))
 
-// // var _ = (fs.NodeOpener)((*Node)(nil))
-// var _ = (fs.NodeCreater)((*Node)(nil))
+var _ = (fs.NodeOpener)((*Node)(nil))
+
+var _ = (fs.NodeCreater)((*Node)(nil))
+
 // var _ = (fs.NodeRenamer)((*Node)(nil))
 
 // var _ = (fs.NodeAccesser)((*Node)(nil))
@@ -81,6 +88,7 @@ func (n *Node) Lookup(ctx context.Context, name string, out *fuse.EntryOut) (*fs
 	}
 	ops := Node{
 		meta: n.meta,
+		obj:  n.obj,
 	}
 	entry := &meta.Entry{Inode: inode, Attr: attr}
 	attrToStat(entry.Inode, entry.Attr, &out.Attr)
@@ -126,9 +134,10 @@ func attrToStat(inode meta.Ino, attr *meta.Attr, out *fuse.Attr) {
 }
 
 func (n *Node) Getattr(ctx context.Context, f fs.FileHandle, out *fuse.AttrOut) (errno syscall.Errno) {
-	if f != nil {
-		return f.(fs.FileGetattrer).Getattr(ctx, out)
-	}
+	// if f != nil {
+	// 	fmt.Println("GetAttr", f)
+	// 	return f.(fs.FileGetattrer).Getattr(ctx, out)
+	// }
 	var err syscall.Errno
 	var attr = &meta.Attr{}
 	// fmt.Println("GetAttr", n)
@@ -154,9 +163,9 @@ func (n *Node) Statfs(ctx context.Context, out *fuse.StatfsOut) syscall.Errno {
 }
 
 func (n *Node) Setattr(ctx context.Context, f fs.FileHandle, in *fuse.SetAttrIn, out *fuse.AttrOut) syscall.Errno {
-	if f != nil {
-		return f.(fs.FileSetattrer).Setattr(ctx, in, out)
-	}
+	// if f != nil {
+	// 	return f.(fs.FileSetattrer).Setattr(ctx, in, out)
+	// }
 	fmt.Println("SetAttr", n, in)
 	var err syscall.Errno
 	var attr = &meta.Attr{}
@@ -173,9 +182,13 @@ func (n *Node) Setattr(ctx context.Context, f fs.FileHandle, in *fuse.SetAttrIn,
 	return 0
 }*/
 
-/*func (n *Node) Open(ctx context.Context, flags uint32) (fh fs.FileHandle, fuseFlags uint32, errno syscall.Errno) {
-	return nil, 0, 0
-}*/
+func (n *Node) Open(ctx context.Context, flags uint32) (fh fs.FileHandle, fuseFlags uint32, errno syscall.Errno) {
+	fmt.Println("Open", n)
+	fh = &FileHandle{
+		n: n,
+	}
+	return fh, 0, 0
+}
 
 func (n *Node) Create(ctx context.Context, name string, flags uint32, mode uint32, out *fuse.EntryOut) (node *fs.Inode, fh fs.FileHandle, fuseFlags uint32, errno syscall.Errno) {
 	if len(name) > maxName {
@@ -195,26 +208,23 @@ func (n *Node) Create(ctx context.Context, name string, flags uint32, mode uint3
 	// v.UpdateLength(inode, attr)
 	entry := &meta.Entry{Inode: ino, Attr: attr}
 	attrToStat(entry.Inode, entry.Attr, &out.Attr)
-	ops := Node{
+	ops := &Node{
 		meta: n.meta,
+		obj:  n.obj,
 	}
 	st := fs.StableAttr{
 		Mode: attr.SMode(),
 		Ino:  uint64(entry.Inode),
 		// Gen:  1,
 	}
-	node = n.NewInode(ctx, &ops, st)
-	// n.AddChild(name, node, true) // done by default?
-	// fmt.Println("Create", ino, name)
-	// fmt.Println("NewNode in create", node)
-	// fmt.Println("Parent node", n)
-	/*fh, err = newFileHandle(ino, name)
-	if err != 0 {
-		return node, nil, 0, err
-	}
-	fmt.Println("NewFileHandle in create", fh)*/
+	n.NewInode(ctx, ops, st)
 
-	return node, nil, 0, 0
+	fh = &FileHandle{
+		n: ops,
+	}
+	fmt.Println("NewFileHandle in create", fh)
+
+	return ops.EmbeddedInode(), fh, 0, 0
 }
 
 /*func (n *Node) Rename(ctx context.Context, name string, newParent fs.InodeEmbedder, newName string, flags uint32) syscall.Errno {
@@ -288,6 +298,7 @@ func (n *Node) Mkdir(ctx context.Context, name string, mode uint32, out *fuse.En
 	attrToStat(entry.Inode, entry.Attr, &out.Attr)
 	ops := Node{
 		meta: n.meta,
+		obj:  n.obj,
 	}
 	st := fs.StableAttr{
 		Mode: attr.SMode(),
@@ -323,9 +334,15 @@ func (n *Node) Unlink(ctx context.Context, name string) syscall.Errno {
 	if len(name) > maxName {
 		return syscall.ENAMETOOLONG
 	}
-	parent := meta.Ino(n.StableAttr().Ino)
+	fmt.Println("Unlink", n, name)
+	ino := n.StableAttr().Ino
+	parent := meta.Ino(ino)
 	err := n.meta.Unlink(ctx, parent, name)
-	return err
+	if err != 0 {
+		return err
+	}
+	errno := n.obj.Delete(ino, "")
+	return fs.ToErrno(errno)
 }
 
 /*func (n *Node) Fsync(ctx context.Context, f fs.FileHandle, flags uint32) syscall.Errno {
