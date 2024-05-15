@@ -335,13 +335,14 @@ func (n *Node) Unlink(ctx context.Context, name string) syscall.Errno {
 		return syscall.ENAMETOOLONG
 	}
 	fmt.Println("Unlink", n, name)
+	child := n.GetChild(name)
 	ino := n.StableAttr().Ino
 	parent := meta.Ino(ino)
 	err := n.meta.Unlink(ctx, parent, name)
 	if err != 0 {
 		return err
 	}
-	errno := n.obj.Delete(ino, "")
+	errno := n.obj.Delete(child.StableAttr().Ino, "")
 	return fs.ToErrno(errno)
 }
 

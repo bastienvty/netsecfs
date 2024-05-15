@@ -62,9 +62,9 @@ func (s *dbData) Put(inode uint64, key string, data []byte) error {
 }
 
 func (s *dbData) Delete(inode uint64, key string) error {
-	_, err := s.db.Delete(&blob{Inode: inode})
-	if err == nil {
-		err = os.ErrNotExist
+	affected, err := s.db.Delete(&blob{Inode: inode})
+	if err == nil && affected == 0 {
+		return nil
 	}
 	return err
 }
