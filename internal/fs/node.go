@@ -2,7 +2,6 @@ package fs
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"syscall"
 	"time"
@@ -98,7 +97,6 @@ func (n *Node) Lookup(ctx context.Context, name string, out *fuse.EntryOut) (*fs
 		// Gen:  1,
 	}
 	newNode := n.NewInode(ctx, &ops, st)
-	// fmt.Println("NewNode in lookup", newNode, inode, attr)
 	return newNode, 0
 }
 
@@ -134,13 +132,8 @@ func attrToStat(inode meta.Ino, attr *meta.Attr, out *fuse.Attr) {
 }
 
 func (n *Node) Getattr(ctx context.Context, f fs.FileHandle, out *fuse.AttrOut) (errno syscall.Errno) {
-	// if f != nil {
-	// 	fmt.Println("GetAttr", f)
-	// 	return f.(fs.FileGetattrer).Getattr(ctx, out)
-	// }
 	var err syscall.Errno
 	var attr = &meta.Attr{}
-	// fmt.Println("GetAttr", n)
 	ino := meta.Ino(n.StableAttr().Ino)
 	err = n.meta.GetAttr(ctx, ino, attr)
 	if err == 0 {
@@ -163,10 +156,6 @@ func (n *Node) Statfs(ctx context.Context, out *fuse.StatfsOut) syscall.Errno {
 }
 
 func (n *Node) Setattr(ctx context.Context, f fs.FileHandle, in *fuse.SetAttrIn, out *fuse.AttrOut) syscall.Errno {
-	// if f != nil {
-	// 	return f.(fs.FileSetattrer).Setattr(ctx, in, out)
-	// }
-	fmt.Println("SetAttr", n, in)
 	var err syscall.Errno
 	var attr = &meta.Attr{}
 	ino := meta.Ino(n.StableAttr().Ino)
@@ -183,7 +172,6 @@ func (n *Node) Setattr(ctx context.Context, f fs.FileHandle, in *fuse.SetAttrIn,
 }*/
 
 func (n *Node) Open(ctx context.Context, flags uint32) (fh fs.FileHandle, fuseFlags uint32, errno syscall.Errno) {
-	fmt.Println("Open", n)
 	fh = &FileHandle{
 		n: n,
 	}
@@ -222,7 +210,6 @@ func (n *Node) Create(ctx context.Context, name string, flags uint32, mode uint3
 	fh = &FileHandle{
 		n: ops,
 	}
-	fmt.Println("NewFileHandle in create", fh)
 
 	return ops.EmbeddedInode(), fh, 0, 0
 }
@@ -268,13 +255,11 @@ func (n *Node) Readdir(ctx context.Context) (fs.DirStream, syscall.Errno) {
 	st := n.meta.Readdir(ctx, inode, 1, &entries)
 	var de fuse.DirEntry
 	for _, e := range entries {
-		// fmt.Println("READDIR ENTRY:", e, string(e.Name))
 		de.Ino = uint64(e.Inode)
 		de.Name = string(e.Name)
 		de.Mode = e.Attr.SMode()
 		result = append(result, de)
 	}
-	// fmt.Println("READDIR RESULT:", result)
 	return fs.NewListDirStream(result), st
 }
 
@@ -334,7 +319,6 @@ func (n *Node) Unlink(ctx context.Context, name string) syscall.Errno {
 	if len(name) > maxName {
 		return syscall.ENAMETOOLONG
 	}
-	fmt.Println("Unlink", n, name)
 	child := n.GetChild(name)
 	ino := n.StableAttr().Ino
 	parent := meta.Ino(ino)

@@ -775,7 +775,6 @@ func (m *dbMeta) Write(ctx context.Context, inode uint64, data []byte, off int64
 		if nodeAttr.Type != TypeFile {
 			return syscall.EPERM
 		}
-		fmt.Println("nodeAttr", nodeAttr)
 		newleng := uint64(len(data)) + uint64(off)
 		nodeAttr.Length = newleng
 		now := time.Now()

@@ -51,7 +51,6 @@ func (s *dbData) Put(inode uint64, key string, data []byte) error {
 	// Key: []byte(key)
 	b := blob{Inode: inode, Data: data, Size: int64(len(data)), Modified: now}
 	n, err := s.db.Insert(&b)
-	fmt.Println("BLOB:", b)
 	if err != nil || n == 0 {
 		n, err = s.db.Update(&b, &blob{Inode: inode})
 	}

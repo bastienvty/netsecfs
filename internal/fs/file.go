@@ -2,7 +2,6 @@ package fs
 
 import (
 	"context"
-	"fmt"
 	"syscall"
 
 	"github.com/hanwen/go-fuse/v2/fs"
@@ -52,20 +51,15 @@ var _ = (fs.FileFsyncer)((*FileHandle)(nil))
 }*/
 
 func (f *FileHandle) Read(ctx context.Context, dest []byte, off int64) (fuse.ReadResult, syscall.Errno) {
-	fmt.Println("READ FILE", dest, string(dest), len(dest), off)
 	ino := f.n.StableAttr().Ino
 	data, error := f.n.obj.Get(ino, "nil", off)
 	if error != nil {
-		fmt.Println("ERROR GET:", data)
 		return nil, syscall.EIO
 	}
-	fmt.Println("READ DATA:", string(data))
 	return fuse.ReadResultData(data), 0
 }
 
 func (f *FileHandle) Write(ctx context.Context, data []byte, off int64) (written uint32, errno syscall.Errno) {
-	fmt.Println("DATA:", string(data))
-	fmt.Println("OFF:", off)
 	ino := f.n.StableAttr().Ino
 	/*text := string(data)
 	lines := strings.Split(text, "\n")
@@ -82,23 +76,19 @@ func (f *FileHandle) Write(ctx context.Context, data []byte, off int64) (written
 	// key := uuid.New().String()
 	error := f.n.obj.Put(ino, "nil", data)
 	if error != nil {
-		fmt.Println("ERROR PUT:", error)
 		return 0, syscall.EIO
 	}
 	return uint32(len(data)), 0
 }
 
 func (f *FileHandle) Flush(ctx context.Context) syscall.Errno {
-	fmt.Println("FLUSH FILE")
 	return 0
 }
 
 func (f *FileHandle) Release(ctx context.Context) syscall.Errno {
-	fmt.Println("RELEASE FILE")
 	return 0
 }
 
 func (f *FileHandle) Fsync(ctx context.Context, flags uint32) syscall.Errno {
-	fmt.Println("FSYNC FILE")
 	return 0
 }
