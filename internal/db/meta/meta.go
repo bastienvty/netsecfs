@@ -125,7 +125,7 @@ func (m *dbMeta) doLoad() (data []byte, err error) {
 
 func (m *dbMeta) Init(format *Format) error {
 	if err := m.db.Sync2(new(setting)); err != nil {
-		return fmt.Errorf("create table setting, counter: %s", err)
+		return fmt.Errorf("create table setting: %s", err)
 	}
 	if err := m.db.Sync2(new(edge)); err != nil {
 		return fmt.Errorf("create table edge: %s", err)
@@ -162,7 +162,19 @@ func (m *dbMeta) Init(format *Format) error {
 
 	m.fmt = format
 	now := time.Now()
-	n := &node{
+	root := &node{
+		Type:      TypeDirectory,
+		Atime:     now.UnixNano() / 1e3,
+		Mtime:     now.UnixNano() / 1e3,
+		Ctime:     now.UnixNano() / 1e3,
+		Atimensec: int16(now.UnixNano() % 1e3),
+		Mtimensec: int16(now.UnixNano() % 1e3),
+		Ctimensec: int16(now.UnixNano() % 1e3),
+		Nlink:     2,
+		Length:    4 << 10,
+		Parent:    1,
+	}
+	shared := &node{
 		Type:      TypeDirectory,
 		Atime:     now.UnixNano() / 1e3,
 		Mtime:     now.UnixNano() / 1e3,
@@ -187,17 +199,12 @@ func (m *dbMeta) Init(format *Format) error {
 			}
 		}
 
-		n.Inode = 1
-		n.Mode = 0777 // allow operations on root
-		/*var cs = []counter{
-			{"nextInode", 2}, // 1 is root
-			{"nextChunk", 1},
-			{"nextSession", 0},
-			{"usedSpace", 0},
-			{"totalInodes", 0},
-			{"nextCleanupSlices", 0},
-		}*/
-		return mustInsert(s, n)
+		root.Inode = 1
+		root.Mode = 0755 // allow operations on root
+		mustInsert(s, root)
+		shared.Inode = 2
+		shared.Mode = 0555
+		return mustInsert(s, &edge{Parent: 1, Name: []byte("shared"), Inode: shared.Inode, Type: TypeDirectory}, shared)
 	})
 }
 
@@ -511,7 +518,9 @@ func (m *dbMeta) Mknod(ctx context.Context, parent Ino, name string, _type uint8
 		}
 
 		n := node{Inode: *inode}
-		m.parseNode(attr, &n) // do almost nothing here (attr is empty)
+		if attr != nil {
+			m.parseNode(attr, &n) // do almost nothing here (attr is empty)
+		}
 		mode &= 07777
 
 		var updateParent bool

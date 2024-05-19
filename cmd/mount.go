@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"os"
 	"syscall"
 	"time"
 
@@ -50,8 +51,8 @@ func mount(cmd *cobra.Command, args []string) {
 		RootStableAttr: &gofs.StableAttr{
 			Ino: uint64(meta.RootInode),
 		},
-		//UID:             uint32(os.Getuid()),
-		//GID:             uint32(os.Getgid()),
+		UID: uint32(os.Getuid()),
+		GID: uint32(os.Getgid()),
 	}
 	fuseOpts.MountOptions = fuse.MountOptions{
 		Options: []string{"rw", "default_permissions"},
