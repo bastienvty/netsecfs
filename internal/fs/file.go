@@ -2,6 +2,7 @@ package fs
 
 import (
 	"context"
+	"fmt"
 	"syscall"
 
 	"github.com/hanwen/go-fuse/v2/fs"
@@ -16,23 +17,23 @@ import (
 // nanafs
 // gocryptfs
 
-type FileHandle struct {
+type File struct {
 	n *Node
 }
 
-var _ fs.FileHandle = (*FileHandle)(nil)
+var _ fs.FileHandle = (*File)(nil)
 
-// var _ = (fs.FileGetattrer)((*FileHandle)(nil))
-// var _ = (fs.FileSetattrer)((*FileHandle)(nil))
-var _ = (fs.FileReader)((*FileHandle)(nil))
+// var _ = (fs.FileGetattrer)((*File)(nil))
+// var _ = (fs.FileSetattrer)((*File)(nil))
+var _ = (fs.FileReader)((*File)(nil))
 
-var _ = (fs.FileWriter)((*FileHandle)(nil))
+var _ = (fs.FileWriter)((*File)(nil))
 
-var _ = (fs.FileFlusher)((*FileHandle)(nil))
-var _ = (fs.FileReleaser)((*FileHandle)(nil))
-var _ = (fs.FileFsyncer)((*FileHandle)(nil))
+var _ = (fs.FileFlusher)((*File)(nil))
+var _ = (fs.FileReleaser)((*File)(nil))
+var _ = (fs.FileFsyncer)((*File)(nil))
 
-/*func newFileHandle(meta meta.Meta, name string) (fh *FileHandle, errno syscall.Errno) {
+/*func newFile(meta meta.Meta, name string) (fh *File, errno syscall.Errno) {
 	st := &syscall.Stat_t{}
 	if err := syscall.Fstat(int(ino), st); err != nil {
 		errno = fs.ToErrno(err)
@@ -41,7 +42,7 @@ var _ = (fs.FileFsyncer)((*FileHandle)(nil))
 
 	osFile := os.NewFile(uintptr(ino), name)
 
-	fh = &FileHandle{}
+	fh = &File{}
 
 	return fh, 0
 }*/
@@ -50,16 +51,18 @@ var _ = (fs.FileFsyncer)((*FileHandle)(nil))
 	return 0
 }*/
 
-func (f *FileHandle) Read(ctx context.Context, dest []byte, off int64) (fuse.ReadResult, syscall.Errno) {
+func (f *File) Read(ctx context.Context, dest []byte, off int64) (fuse.ReadResult, syscall.Errno) {
+	fmt.Println("READ")
 	ino := f.n.StableAttr().Ino
-	data, error := f.n.obj.Get(ino, "nil", off)
+	data, error := f.n.obj.Get(ino, nil, off)
 	if error != nil {
 		return nil, syscall.EIO
 	}
 	return fuse.ReadResultData(data), 0
 }
 
-func (f *FileHandle) Write(ctx context.Context, data []byte, off int64) (written uint32, errno syscall.Errno) {
+func (f *File) Write(ctx context.Context, data []byte, off int64) (written uint32, errno syscall.Errno) {
+	fmt.Println("WRITE")
 	ino := f.n.StableAttr().Ino
 	/*text := string(data)
 	lines := strings.Split(text, "\n")
@@ -69,26 +72,27 @@ func (f *FileHandle) Write(ctx context.Context, data []byte, off int64) (written
 	}
 	fmt.Println("TEXT:", text)
 	newData := []byte(text)*/
+	// decData, _ := f.n.enc.Decrypt(nil, data)
 	err := f.n.meta.Write(ctx, ino, data, off)
 	if err != 0 {
 		return 0, err
 	}
 	// key := uuid.New().String()
-	error := f.n.obj.Put(ino, "nil", data)
+	error := f.n.obj.Put(ino, nil, data)
 	if error != nil {
 		return 0, syscall.EIO
 	}
 	return uint32(len(data)), 0
 }
 
-func (f *FileHandle) Flush(ctx context.Context) syscall.Errno {
+func (f *File) Flush(ctx context.Context) syscall.Errno {
 	return 0
 }
 
-func (f *FileHandle) Release(ctx context.Context) syscall.Errno {
+func (f *File) Release(ctx context.Context) syscall.Errno {
 	return 0
 }
 
-func (f *FileHandle) Fsync(ctx context.Context, flags uint32) syscall.Errno {
+func (f *File) Fsync(ctx context.Context, flags uint32) syscall.Errno {
 	return 0
 }

@@ -6,6 +6,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/bastienvty/netsecfs/internal/crypto"
 	"github.com/bastienvty/netsecfs/internal/db/meta"
 	"github.com/bastienvty/netsecfs/internal/db/object"
 	"github.com/hanwen/go-fuse/v2/fs"
@@ -35,20 +36,18 @@ const (
 
 type Node struct {
 	fs.Inode
+
 	meta meta.Meta
 	obj  object.ObjectStorage
+	enc  crypto.CryptoHelper
 }
 
-func NewNode(meta meta.Meta, obj object.ObjectStorage) *Node {
+func NewRootNode(meta meta.Meta, obj object.ObjectStorage) *Node {
 	return &Node{
 		meta: meta,
 		obj:  obj,
+		enc:  crypto.CryptoHelper{},
 	}
-}
-
-func (n *Node) isRoot() bool {
-	_, parent := n.Parent()
-	return parent == nil
 }
 
 var _ = (fs.InodeEmbedder)((*Node)(nil))
@@ -88,6 +87,7 @@ func (n *Node) Lookup(ctx context.Context, name string, out *fuse.EntryOut) (*fs
 	ops := Node{
 		meta: n.meta,
 		obj:  n.obj,
+		enc:  n.enc,
 	}
 	entry := &meta.Entry{Inode: inode, Attr: attr}
 	attrToStat(entry.Inode, entry.Attr, &out.Attr)
@@ -172,7 +172,7 @@ func (n *Node) Setattr(ctx context.Context, f fs.FileHandle, in *fuse.SetAttrIn,
 }*/
 
 func (n *Node) Open(ctx context.Context, flags uint32) (fh fs.FileHandle, fuseFlags uint32, errno syscall.Errno) {
-	fh = &FileHandle{
+	fh = &File{
 		n: n,
 	}
 	return fh, 0, 0
@@ -199,6 +199,7 @@ func (n *Node) Create(ctx context.Context, name string, flags uint32, mode uint3
 	ops := &Node{
 		meta: n.meta,
 		obj:  n.obj,
+		enc:  n.enc,
 	}
 	st := fs.StableAttr{
 		Mode: attr.SMode(),
@@ -207,7 +208,7 @@ func (n *Node) Create(ctx context.Context, name string, flags uint32, mode uint3
 	}
 	n.NewInode(ctx, ops, st)
 
-	fh = &FileHandle{
+	fh = &File{
 		n: ops,
 	}
 
@@ -230,13 +231,6 @@ func (n *Node) Readdir(ctx context.Context) (fs.DirStream, syscall.Errno) {
 	if err := n.meta.GetAttr(ctx, inode, &attr); err != 0 {
 		return nil, err
 	}
-	/*var mmask uint8 = MODE_MASK_R
-	if plus != 0 {
-		mmask |= MODE_MASK_X
-	}
-	if st := m.Access(ctx, inode, mmask, &attr); st != 0 {
-		return st
-	}*/
 	if inode == meta.RootInode {
 		attr.Parent = meta.RootInode
 	}
@@ -284,6 +278,7 @@ func (n *Node) Mkdir(ctx context.Context, name string, mode uint32, out *fuse.En
 	ops := Node{
 		meta: n.meta,
 		obj:  n.obj,
+		enc:  n.enc,
 	}
 	st := fs.StableAttr{
 		Mode: attr.SMode(),

@@ -75,7 +75,7 @@ func mount(cmd *cobra.Command, args []string) {
 	}
 
 	syscall.Umask(0000)
-	root := fs.NewNode(m, blob)
+	root := fs.NewRootNode(m, blob)
 	server, err := gofs.Mount(mp, root, fuseOpts)
 	if err != nil {
 		fmt.Println("Mount fail: ", err)

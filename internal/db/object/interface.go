@@ -38,9 +38,9 @@ type ObjectStorage interface {
 	// Description of the object storage.
 	String() string
 	// Get the data for the given object specified by key.
-	Get(inode uint64, key string, off int64) ([]byte, error)
+	Get(inode uint64, key []byte, off int64) ([]byte, error)
 	// Put data read from a reader to an object specified by key.
-	Put(inode uint64, key string, data []byte) error
+	Put(inode uint64, key []byte, data []byte) error
 	// Delete a object.
 	Delete(inode uint64, key string) error
 }

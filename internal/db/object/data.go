@@ -24,13 +24,13 @@ func (s *dbData) String() string {
 
 type blob struct {
 	Inode uint64 `xorm:"pk"`
-	//Key      []byte    `xorm:"notnull unique(blob) varbinary(255) "`
+	// Key      []byte    `xorm:"notnull"`
 	Size     int64     `xorm:"notnull"`
 	Modified time.Time `xorm:"notnull updated"`
 	Data     []byte    `xorm:"mediumblob"`
 }
 
-func (s *dbData) Get(inode uint64, key string, off int64) ([]byte, error) {
+func (s *dbData) Get(inode uint64, key []byte, off int64) ([]byte, error) {
 	var b = blob{Inode: inode}
 	ok, err := s.db.Get(&b)
 	if err != nil {
@@ -46,7 +46,7 @@ func (s *dbData) Get(inode uint64, key string, off int64) ([]byte, error) {
 	return data, nil
 }
 
-func (s *dbData) Put(inode uint64, key string, data []byte) error {
+func (s *dbData) Put(inode uint64, key []byte, data []byte) error {
 	now := time.Now()
 	// Key: []byte(key)
 	b := blob{Inode: inode, Data: data, Size: int64(len(data)), Modified: now}
