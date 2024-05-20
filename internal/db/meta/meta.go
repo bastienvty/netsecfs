@@ -55,6 +55,7 @@ type node struct {
 type namedNode struct {
 	node `xorm:"extends"`
 	Name []byte `xorm:"varbinary(255)"`
+	Key  []byte
 }
 
 type user struct {
@@ -169,7 +170,7 @@ func (m *dbMeta) Init(format *Format) error {
 		Atimensec: int16(now.UnixNano() % 1e3),
 		Mtimensec: int16(now.UnixNano() % 1e3),
 		Ctimensec: int16(now.UnixNano() % 1e3),
-		Nlink:     2,
+		Nlink:     3,
 		Length:    4 << 10,
 		Parent:    1,
 	}
@@ -441,9 +442,24 @@ func (m *dbMeta) mergeAttr(ctx context.Context, inode Ino, set uint16, cur, attr
 	return &dirtyAttr, 0
 }
 
-func (m *dbMeta) getNode(parent Ino, name string, nn *namedNode) syscall.Errno {
+func (m *dbMeta) GetKey(ctx context.Context, inode Ino, key *[]byte) syscall.Errno {
 	return errno(m.roTxn(func(s *xorm.Session) error {
-		var edge = edge{Parent: parent, Name: []byte(name)}
+		var e = edge{Inode: inode}
+		ok, err := s.Get(&e)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return syscall.ENOENT
+		}
+		*key = e.Key
+		return nil
+	}))
+}
+
+func (m *dbMeta) getNode(parent Ino, inode Ino, nn *namedNode) syscall.Errno {
+	return errno(m.roTxn(func(s *xorm.Session) error {
+		var edge = edge{Parent: parent, Inode: inode}
 		exist, err := s.Get(&edge)
 		if err != nil {
 			log.Fatalf("Failed to find nodes: %v", err)
@@ -459,23 +475,22 @@ func (m *dbMeta) getNode(parent Ino, name string, nn *namedNode) syscall.Errno {
 		} else if !exist {
 			return syscall.ENOENT
 		}
-		*nn = namedNode{node: node, Name: []byte(name)}
+		*nn = namedNode{node: node}
 		return nil
 	}))
 }
 
-func (m *dbMeta) Lookup(ctx context.Context, parent Ino, name string, inode *Ino, attr *Attr) syscall.Errno {
+func (m *dbMeta) Lookup(ctx context.Context, parent Ino, inode Ino, attr *Attr) syscall.Errno {
 	nn := namedNode{}
-	err := m.getNode(parent, name, &nn)
+	err := m.getNode(parent, inode, &nn)
 	if err != 0 {
 		return err
 	}
-	*inode = nn.Inode
 	m.parseAttr(&nn.node, attr)
 	return 0
 }
 
-func (m *dbMeta) Mknod(ctx context.Context, parent Ino, name string, _type uint8, mode uint32, inode *Ino, key []byte, attr *Attr) syscall.Errno {
+func (m *dbMeta) Mknod(ctx context.Context, parent Ino, _type uint8, mode uint32, inode *Ino, name, key []byte, attr *Attr) syscall.Errno {
 	return errno(m.txn(func(s *xorm.Session) error {
 		var pn = node{Inode: parent}
 		ok, err := s.Get(&pn)
@@ -490,7 +505,7 @@ func (m *dbMeta) Mknod(ctx context.Context, parent Ino, name string, _type uint8
 		}
 		var pattr Attr
 		m.parseAttr(&pn, &pattr)
-		var e = edge{Parent: parent, Name: []byte(name)}
+		var e = edge{Parent: parent, Name: name}
 		ok, err = s.Get(&e)
 		if err != nil {
 			return err
@@ -553,7 +568,7 @@ func (m *dbMeta) Mknod(ctx context.Context, parent Ino, name string, _type uint8
 			n.Type = TypeFile
 		}
 
-		if err = mustInsert(s, &edge{Parent: parent, Name: []byte(name), Inode: *inode, Type: _type, Key: key}, &n); err != nil {
+		if err = mustInsert(s, &edge{Parent: parent, Name: name, Inode: *inode, Type: _type, Key: key}, &n); err != nil {
 			return err
 		}
 		if updateParent {
@@ -586,6 +601,7 @@ func (m *dbMeta) joinNodes(parent Ino, nns *[]namedNode) syscall.Errno {
 			for _, e := range edges {
 				if e.Inode == n.Inode {
 					nn.Name = e.Name
+					nn.Key = e.Key
 					break
 				}
 			}
@@ -615,6 +631,7 @@ func (m *dbMeta) Readdir(ctx context.Context, inode Ino, plus uint8, entries *[]
 		entry := &Entry{
 			Inode: n.Inode,
 			Name:  n.Name,
+			Key:   n.Key,
 			Attr:  &Attr{},
 		}
 		if plus != 0 {
@@ -627,7 +644,7 @@ func (m *dbMeta) Readdir(ctx context.Context, inode Ino, plus uint8, entries *[]
 	return err
 }
 
-func (m *dbMeta) Rmdir(ctx context.Context, parent Ino, name string) syscall.Errno {
+func (m *dbMeta) Rmdir(ctx context.Context, parent, inode Ino) syscall.Errno {
 	return errno(m.txn(func(s *xorm.Session) error {
 		var pn = node{Inode: parent}
 		ok, err := s.Get(&pn)
@@ -645,7 +662,7 @@ func (m *dbMeta) Rmdir(ctx context.Context, parent Ino, name string) syscall.Err
 		/*if st := m.Access(ctx, parent, MODE_MASK_W|MODE_MASK_X, &pattr); st != 0 {
 			return st
 		}*/
-		var e = edge{Parent: parent, Name: []byte(name)}
+		var e = edge{Parent: parent, Inode: inode}
 		ok, err = s.Get(&e)
 		if err != nil {
 			return err
@@ -674,7 +691,7 @@ func (m *dbMeta) Rmdir(ctx context.Context, parent Ino, name string) syscall.Err
 				return syscall.EACCES
 			}*/
 		} else {
-			logger.Warnf("no attribute for inode %d (%d, %s)", e.Inode, parent, name)
+			logger.Warnf("no attribute for inode %d (%d, %s)", inode, parent, e.Inode)
 		}
 		pn.Nlink--
 		pn.Mtime = now / 1e3
@@ -695,7 +712,7 @@ func (m *dbMeta) Rmdir(ctx context.Context, parent Ino, name string) syscall.Err
 	}, parent))
 }
 
-func (m *dbMeta) Unlink(ctx context.Context, parent Ino, name string) syscall.Errno {
+func (m *dbMeta) Unlink(ctx context.Context, parent, inode Ino) syscall.Errno {
 	return errno(m.txn(func(s *xorm.Session) error {
 		var n node
 		var pn = node{Inode: parent}
@@ -714,7 +731,7 @@ func (m *dbMeta) Unlink(ctx context.Context, parent Ino, name string) syscall.Er
 		if st := m.Access(ctx, parent, MODE_MASK_W|MODE_MASK_X, &pattr); st != 0 {
 			return st
 		}*/
-		var e = edge{Parent: parent, Name: []byte(name)}
+		var e = edge{Parent: parent, Inode: inode}
 		ok, err = s.Get(&e)
 		if err != nil {
 			return err
@@ -737,7 +754,7 @@ func (m *dbMeta) Unlink(ctx context.Context, parent Ino, name string) syscall.Er
 			n.Ctimensec = int16(now % 1e3)
 			n.Nlink--
 		} else {
-			logger.Warnf("no attribute for inode %d (%d, %s)", e.Inode, parent, name)
+			logger.Warnf("no attribute for inode %d (%d, %s)", inode, parent, e.Name)
 		}
 
 		var updateParent bool
@@ -749,7 +766,7 @@ func (m *dbMeta) Unlink(ctx context.Context, parent Ino, name string) syscall.Er
 			updateParent = true
 		}
 
-		if _, err := s.Delete(&edge{Parent: parent, Name: e.Name}); err != nil {
+		if _, err := s.Delete(&edge{Parent: parent, Inode: e.Inode}); err != nil {
 			return err
 		}
 		if _, err := s.Delete(&node{Inode: e.Inode}); err != nil {

@@ -3,7 +3,6 @@ package fs
 import (
 	"context"
 	"crypto/rand"
-	"fmt"
 	"io"
 	"os"
 	"syscall"
@@ -37,19 +36,23 @@ const (
 	AttrTimeout     = 1 * time.Second
 )
 
+type Ino = meta.Ino
+
 type Node struct {
 	fs.Inode
 
-	meta meta.Meta
-	obj  object.ObjectStorage
-	enc  crypto.CryptoHelper
+	inoMap map[string]Ino
+	meta   meta.Meta
+	obj    object.ObjectStorage
+	enc    crypto.CryptoHelper
 }
 
 func NewRootNode(meta meta.Meta, obj object.ObjectStorage) *Node {
 	return &Node{
-		meta: meta,
-		obj:  obj,
-		enc:  crypto.CryptoHelper{},
+		inoMap: make(map[string]Ino),
+		meta:   meta,
+		obj:    obj,
+		enc:    crypto.CryptoHelper{},
 	}
 }
 
@@ -81,18 +84,27 @@ func (n *Node) Lookup(ctx context.Context, name string, out *fuse.EntryOut) (*fs
 	}
 	var err syscall.Errno
 	var attr = &meta.Attr{}
-	var inode meta.Ino
-	ino := meta.Ino(n.StableAttr().Ino)
-	err = n.meta.Lookup(ctx, ino, name, &inode, attr)
+	parent := Ino(n.StableAttr().Ino)
+	var key []byte
+	ino, ok := n.inoMap[name]
+	if !ok {
+		return nil, syscall.ENOENT
+	}
+	err = n.meta.GetKey(ctx, ino, &key)
+	if err != 0 {
+		return nil, err
+	}
+	err = n.meta.Lookup(ctx, parent, ino, attr)
 	if err != 0 {
 		return nil, err
 	}
 	ops := Node{
-		meta: n.meta,
-		obj:  n.obj,
-		enc:  n.enc,
+		inoMap: n.inoMap,
+		meta:   n.meta,
+		obj:    n.obj,
+		enc:    n.enc,
 	}
-	entry := &meta.Entry{Inode: inode, Attr: attr}
+	entry := &meta.Entry{Inode: ino, Attr: attr}
 	attrToStat(entry.Inode, entry.Attr, &out.Attr)
 	st := fs.StableAttr{
 		Mode: attr.SMode(),
@@ -103,7 +115,7 @@ func (n *Node) Lookup(ctx context.Context, name string, out *fuse.EntryOut) (*fs
 	return newNode, 0
 }
 
-func attrToStat(inode meta.Ino, attr *meta.Attr, out *fuse.Attr) {
+func attrToStat(inode Ino, attr *meta.Attr, out *fuse.Attr) {
 	if inode == meta.RootInode {
 		out.Uid = 0
 		out.Gid = 0
@@ -137,7 +149,7 @@ func attrToStat(inode meta.Ino, attr *meta.Attr, out *fuse.Attr) {
 func (n *Node) Getattr(ctx context.Context, f fs.FileHandle, out *fuse.AttrOut) (errno syscall.Errno) {
 	var err syscall.Errno
 	var attr = &meta.Attr{}
-	ino := meta.Ino(n.StableAttr().Ino)
+	ino := Ino(n.StableAttr().Ino)
 	err = n.meta.GetAttr(ctx, ino, attr)
 	if err == 0 {
 		entry := &meta.Entry{Inode: ino, Attr: attr}
@@ -161,7 +173,7 @@ func (n *Node) Statfs(ctx context.Context, out *fuse.StatfsOut) syscall.Errno {
 func (n *Node) Setattr(ctx context.Context, f fs.FileHandle, in *fuse.SetAttrIn, out *fuse.AttrOut) syscall.Errno {
 	var err syscall.Errno
 	var attr = &meta.Attr{}
-	ino := meta.Ino(n.StableAttr().Ino)
+	ino := Ino(n.StableAttr().Ino)
 	err = n.meta.SetAttr(ctx, ino, in, attr)
 	if err == 0 {
 		entry := &meta.Entry{Inode: ino, Attr: attr}
@@ -189,32 +201,33 @@ func (n *Node) Create(ctx context.Context, name string, flags uint32, mode uint3
 		return nil, nil, 0, syscall.EEXIST
 	}
 	attr := &meta.Attr{}
-	parent := meta.Ino(n.StableAttr().Ino)
-	var ino meta.Ino
+	parent := Ino(n.StableAttr().Ino)
+	var ino Ino
 	n.meta.GetNextInode(ctx, &ino)
-	/*key := make([]byte, 32)
+	key := make([]byte, 32)
 	if _, err := io.ReadFull(rand.Reader, key); err != nil {
 		return nil, nil, 0, fs.ToErrno(err)
 	}
-	fmt.Println("KEY:", key)
-	cipher, _ := n.enc.Encrypt(key, []byte(name))
-	fmt.Println("ENCRYPTED:", name, "->", string(cipher))
-	decipher, er := n.enc.Decrypt(key, cipher)
-	if er != nil {
-		fmt.Println("DECRYPT ERROR:", er)
+	cipher, ok := n.enc.Encrypt(key, []byte(name))
+	if ok != nil {
+		return nil, nil, 0, syscall.EINVAL
 	}
-	fmt.Println("DECRYPTED:", cipher, "->", string(decipher))*/
-	err := n.meta.Mknod(ctx, parent, name, meta.TypeFile, mode, &ino, nil, attr)
+	err := n.meta.Mknod(ctx, parent, meta.TypeFile, mode, &ino, cipher, key, attr)
 	if err != 0 {
 		return nil, nil, 0, err
+	}
+	_, exist := n.inoMap[name]
+	if !exist {
+		n.inoMap[name] = ino
 	}
 	// v.UpdateLength(inode, attr)
 	entry := &meta.Entry{Inode: ino, Attr: attr}
 	attrToStat(entry.Inode, entry.Attr, &out.Attr)
 	ops := &Node{
-		meta: n.meta,
-		obj:  n.obj,
-		enc:  n.enc,
+		inoMap: n.inoMap,
+		meta:   n.meta,
+		obj:    n.obj,
+		enc:    n.enc,
 	}
 	st := fs.StableAttr{
 		Mode: attr.SMode(),
@@ -242,7 +255,7 @@ func (n *Node) Readdir(ctx context.Context) (fs.DirStream, syscall.Errno) {
 	var attr meta.Attr
 	var entries []*meta.Entry
 	result := make([]fuse.DirEntry, 0)
-	inode := meta.Ino(n.StableAttr().Ino)
+	inode := Ino(n.StableAttr().Ino)
 	if err := n.meta.GetAttr(ctx, inode, &attr); err != 0 {
 		return nil, err
 	}
@@ -263,9 +276,16 @@ func (n *Node) Readdir(ctx context.Context) (fs.DirStream, syscall.Errno) {
 	})
 	st := n.meta.Readdir(ctx, inode, 1, &entries)
 	var de fuse.DirEntry
+	var name []byte
 	for _, e := range entries {
+		name, _ = n.enc.Decrypt(e.Key, e.Name)
+		if string(name) != "." && string(name) != ".." {
+			if n.inoMap != nil {
+				n.inoMap[string(name)] = e.Inode
+			}
+		}
 		de.Ino = uint64(e.Inode)
-		de.Name = string(e.Name)
+		de.Name = string(name)
 		de.Mode = e.Attr.SMode()
 		result = append(result, de)
 	}
@@ -280,15 +300,18 @@ func (n *Node) Mkdir(ctx context.Context, name string, mode uint32, out *fuse.En
 		return nil, syscall.EEXIST
 	}
 	attr := &meta.Attr{}
-	parent := meta.Ino(n.StableAttr().Ino)
-	var ino meta.Ino
+	parent := Ino(n.StableAttr().Ino)
+	var ino Ino
 	n.meta.GetNextInode(ctx, &ino)
 	key := make([]byte, 32)
 	if _, err := io.ReadFull(rand.Reader, key); err != nil {
 		return nil, fs.ToErrno(err)
 	}
-	fmt.Println("KEY:", key)
-	err := n.meta.Mknod(ctx, parent, name, meta.TypeDirectory, mode, &ino, key, attr)
+	cipher, ok := n.enc.Encrypt(key, []byte(name))
+	if ok != nil {
+		return nil, syscall.EINVAL
+	}
+	err := n.meta.Mknod(ctx, parent, meta.TypeDirectory, mode, &ino, cipher, key, attr)
 	if err != 0 {
 		return nil, err
 	}
@@ -296,9 +319,10 @@ func (n *Node) Mkdir(ctx context.Context, name string, mode uint32, out *fuse.En
 	entry := &meta.Entry{Inode: ino, Attr: attr}
 	attrToStat(entry.Inode, entry.Attr, &out.Attr)
 	ops := Node{
-		meta: n.meta,
-		obj:  n.obj,
-		enc:  n.enc,
+		inoMap: make(map[string]Ino),
+		meta:   n.meta,
+		obj:    n.obj,
+		enc:    n.enc,
 	}
 	st := fs.StableAttr{
 		Mode: attr.SMode(),
@@ -314,15 +338,20 @@ func (n *Node) Rmdir(ctx context.Context, name string) syscall.Errno {
 	if len(name) > maxName {
 		return syscall.ENAMETOOLONG
 	}
+	if name == "shared" {
+		return syscall.EPERM
+	}
 	if name == "." {
 		return syscall.EINVAL
 	}
 	if name == ".." {
 		return syscall.ENOTEMPTY
 	}
-	parent := meta.Ino(n.StableAttr().Ino)
+	ino := n.inoMap[name]
+	parent := Ino(n.StableAttr().Ino)
 	// node := n.GetChild(name)
-	err := n.meta.Rmdir(ctx, parent, name)
+	err := n.meta.Rmdir(ctx, parent, ino)
+	delete(n.inoMap, name)
 	// seems to be done by default
 	/*if err == 0 {
 		n.RmChild(name)
@@ -335,9 +364,10 @@ func (n *Node) Unlink(ctx context.Context, name string) syscall.Errno {
 		return syscall.ENAMETOOLONG
 	}
 	child := n.GetChild(name)
-	ino := n.StableAttr().Ino
-	parent := meta.Ino(ino)
-	err := n.meta.Unlink(ctx, parent, name)
+	ino := n.inoMap[name]
+	parent := Ino(n.StableAttr().Ino)
+	err := n.meta.Unlink(ctx, parent, ino)
+	delete(n.inoMap, name)
 	if err != 0 {
 		return err
 	}

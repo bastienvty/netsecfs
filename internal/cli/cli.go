@@ -61,10 +61,10 @@ func StartConsole(cmd *cobra.Command, args []string) {
 				fmt.Println("Unmount fail: ", err)
 				continue
 			}
+			fmt.Println("Umount successfull.")
 		case "share":
 			share.Share(args[0])
 		}
-		fmt.Println("You entered:", line)
 	}
 }
 
@@ -114,9 +114,9 @@ func mount(cmd *cobra.Command, args []string) (meta.Meta, object.ObjectStorage, 
 		return nil, nil, nil, err
 	}
 
+	fmt.Println("Unmount to stop the server.")
 	// server.Wait()
 	// fmt.Println("Server exited.")
-	fmt.Println("Unmount to stop the server.")
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 	go func() {

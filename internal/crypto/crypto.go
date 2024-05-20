@@ -16,6 +16,9 @@ type CryptoHelper struct {
 }
 
 func (c *CryptoHelper) Encrypt(key, plaintext []byte) ([]byte, error) {
+	if len(key) == 0 {
+		return plaintext, nil
+	}
 	block, err := aes.NewCipher(key)
 	if err != nil {
 		panic(err.Error())
@@ -39,6 +42,9 @@ func (c *CryptoHelper) Encrypt(key, plaintext []byte) ([]byte, error) {
 }
 
 func (c *CryptoHelper) Decrypt(key, ciphertext []byte) ([]byte, error) {
+	if len(key) == 0 {
+		return ciphertext, nil
+	}
 	block, err := aes.NewCipher(key)
 	if err != nil {
 		return nil, err

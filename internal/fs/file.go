@@ -62,7 +62,6 @@ func (f *File) Read(ctx context.Context, dest []byte, off int64) (fuse.ReadResul
 }
 
 func (f *File) Write(ctx context.Context, data []byte, off int64) (written uint32, errno syscall.Errno) {
-	fmt.Println("WRITE")
 	ino := f.n.StableAttr().Ino
 	/*text := string(data)
 	lines := strings.Split(text, "\n")

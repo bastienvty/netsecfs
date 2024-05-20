@@ -135,6 +135,7 @@ func (a Attr) SMode() uint32 {
 type Entry struct {
 	Inode Ino
 	Name  []byte
+	Key   []byte
 	Attr  *Attr
 }
 
@@ -154,16 +155,16 @@ type Meta interface {
 	// Access checks the access permission on given inode.
 	// doAccess(ctx context.Context, inode Ino, modemask uint8, attr *Attr) syscall.Errno
 	// Lookup returns the inode and attributes for the given entry in a directory.
-	Lookup(ctx context.Context, parent Ino, name string, inode *Ino, attr *Attr) syscall.Errno
+	Lookup(ctx context.Context, parent Ino, inode Ino, attr *Attr) syscall.Errno
 	// GetAttr returns the attributes for given node.
 	GetAttr(ctx context.Context, inode Ino, attr *Attr) syscall.Errno
 	// SetAttr updates the attributes for given node.
 	SetAttr(ctx context.Context, inode Ino, in *fuse.SetAttrIn, attr *Attr) syscall.Errno
 	// Unlink removes a file entry from a directory.
 	// The file will be deleted if it's not linked by any entries and not open by any sessions.
-	Unlink(ctx context.Context, parent Ino, name string) syscall.Errno
+	Unlink(ctx context.Context, parent, inode Ino) syscall.Errno
 	// Rmdir removes an empty sub-directory.
-	Rmdir(ctx context.Context, parent Ino, name string) syscall.Errno
+	Rmdir(ctx context.Context, parent, inode Ino) syscall.Errno
 	// Rename move an entry from a source directory to another with given name.
 	// The targeted entry will be overwrited if it's a file or empty directory.
 	// For Hadoop, the target should not be overwritten.
@@ -172,7 +173,7 @@ type Meta interface {
 	Readdir(ctx context.Context, inode Ino, wantattr uint8, entries *[]*Entry) syscall.Errno
 	// Create creates a file in a directory with given name.
 	// Create(ctx context.Context, parent Ino, name string, mode uint16, cumask uint16, flags uint32, inode *Ino, attr *Attr) syscall.Errno
-	Mknod(ctx context.Context, parent Ino, name string, _type uint8, mode uint32, inode *Ino, key []byte, attr *Attr) syscall.Errno
+	Mknod(ctx context.Context, parent Ino, _type uint8, mode uint32, inode *Ino, name, key []byte, attr *Attr) syscall.Errno
 	// Open checks permission on a node and track it as open.
 	// doOpen(ctx context.Context, inode Ino, flags uint32, attr *Attr) syscall.Errno
 	// Close a file.
@@ -181,6 +182,7 @@ type Meta interface {
 	// doRead(ctx context.Context, inode Ino, indx uint32, slices *[]Slice) syscall.Errno
 	// Write put a slice of data on top of the given chunk.
 	Write(ctx context.Context, inode uint64, data []byte, off int64) syscall.Errno
+	GetKey(ctx context.Context, inode Ino, key *[]byte) syscall.Errno
 }
 
 func RegisterMeta(addr string) Meta {
