@@ -172,7 +172,7 @@ type Meta interface {
 	Readdir(ctx context.Context, inode Ino, wantattr uint8, entries *[]*Entry) syscall.Errno
 	// Create creates a file in a directory with given name.
 	// Create(ctx context.Context, parent Ino, name string, mode uint16, cumask uint16, flags uint32, inode *Ino, attr *Attr) syscall.Errno
-	Mknod(ctx context.Context, parent Ino, name string, _type uint8, mode uint32, inode *Ino, attr *Attr) syscall.Errno
+	Mknod(ctx context.Context, parent Ino, name string, _type uint8, mode uint32, inode *Ino, key []byte, attr *Attr) syscall.Errno
 	// Open checks permission on a node and track it as open.
 	// doOpen(ctx context.Context, inode Ino, flags uint32, attr *Attr) syscall.Errno
 	// Close a file.

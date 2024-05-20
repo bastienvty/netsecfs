@@ -33,6 +33,7 @@ type edge struct {
 	Name   []byte `xorm:"unique(edge) varbinary(255) notnull"`
 	Inode  Ino    `xorm:"index notnull"`
 	Type   uint8  `xorm:"notnull"`
+	Key    []byte
 }
 
 type node struct {
@@ -68,9 +69,7 @@ type dbMeta struct {
 	addr string
 	fmt  *Format
 
-	root       Ino
-	dirParents map[Ino]Ino
-	parentMu   sync.Mutex // protect dirParents
+	root Ino
 }
 
 func errno(err error) syscall.Errno {
@@ -476,7 +475,7 @@ func (m *dbMeta) Lookup(ctx context.Context, parent Ino, name string, inode *Ino
 	return 0
 }
 
-func (m *dbMeta) Mknod(ctx context.Context, parent Ino, name string, _type uint8, mode uint32, inode *Ino, attr *Attr) syscall.Errno {
+func (m *dbMeta) Mknod(ctx context.Context, parent Ino, name string, _type uint8, mode uint32, inode *Ino, key []byte, attr *Attr) syscall.Errno {
 	return errno(m.txn(func(s *xorm.Session) error {
 		var pn = node{Inode: parent}
 		ok, err := s.Get(&pn)
@@ -554,7 +553,7 @@ func (m *dbMeta) Mknod(ctx context.Context, parent Ino, name string, _type uint8
 			n.Type = TypeFile
 		}
 
-		if err = mustInsert(s, &edge{Parent: parent, Name: []byte(name), Inode: *inode, Type: _type}, &n); err != nil {
+		if err = mustInsert(s, &edge{Parent: parent, Name: []byte(name), Inode: *inode, Type: _type, Key: key}, &n); err != nil {
 			return err
 		}
 		if updateParent {
@@ -812,10 +811,9 @@ func newSQLMeta(driver, addr string) (Meta, error) {
 	engine.DB().SetConnMaxIdleTime(time.Minute * 5)
 	engine.SetTableMapper(names.NewPrefixMapper(engine.GetTableMapper(), "nsfs_"))
 	m := &dbMeta{
-		db:         engine,
-		addr:       addr,
-		root:       RootInode,
-		dirParents: make(map[Ino]Ino),
+		db:   engine,
+		addr: addr,
+		root: RootInode,
 	}
 	return m, nil
 }

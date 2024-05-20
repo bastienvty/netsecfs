@@ -1,35 +1,74 @@
-package cmd
+package cli
 
 import (
+	"bufio"
 	"fmt"
 	"os"
+	"os/signal"
 	"syscall"
 	"time"
 
 	"github.com/bastienvty/netsecfs/internal/db/meta"
 	"github.com/bastienvty/netsecfs/internal/db/object"
 	"github.com/bastienvty/netsecfs/internal/fs"
+	"github.com/bastienvty/netsecfs/internal/share"
 	gofs "github.com/hanwen/go-fuse/v2/fs"
 	"github.com/hanwen/go-fuse/v2/fuse"
 	"github.com/spf13/cobra"
 )
 
-var (
-	user string
-	pwd  string
+const (
+	input = "netsecfs> "
 )
 
-var mountCmd = &cobra.Command{
-	Use:       "mount [flags] MOUNTPOINT",
-	Short:     "Mount the filesystem",
-	Long:      `Mount the filesystem to the specified directory.`,
-	ValidArgs: []string{"username", "password"},
-	Args:      cobra.ExactArgs(1),
-	Example:   "netsecfs mount --meta /path/to/meta.db --username toto --password titi /tmp/nsfs",
-	Run:       mount,
+func StartConsole(cmd *cobra.Command, args []string) {
+	scanner := bufio.NewScanner(os.Stdin)
+	var server *fuse.Server
+	var m meta.Meta
+	var blob object.ObjectStorage
+	var err error
+	for {
+		fmt.Print(input)
+		scanned := scanner.Scan()
+		if !scanned {
+			return
+		}
+		line := scanner.Text()
+		switch line {
+		case "exit":
+			return
+		case "help":
+			fmt.Println("Commands: mount, umount, share, exit")
+		case "mount":
+			m, blob, server, err = mount(cmd, args)
+			if err != nil || server == nil {
+				fmt.Println("Mount fail: ", err)
+				return
+			}
+			if m != nil {
+				defer m.Shutdown()
+			}
+			if blob != nil {
+				defer object.Shutdown(blob)
+			}
+		case "umount":
+			if server == nil {
+				fmt.Println("Server is nil.")
+				continue
+			}
+			err = server.Unmount()
+			if err != nil {
+				fmt.Println("Unmount fail: ", err)
+				continue
+			}
+		case "share":
+			share.Share(args[0])
+		}
+		fmt.Println("You entered:", line)
+	}
 }
 
-func mount(cmd *cobra.Command, args []string) {
+func mount(cmd *cobra.Command, args []string) (meta.Meta, object.ObjectStorage, *fuse.Server, error) {
 	addr, _ := cmd.Flags().GetString("meta")
 	mp := args[0]
 
@@ -37,7 +76,7 @@ func mount(cmd *cobra.Command, args []string) {
 	format, err := m.Load()
 	if err != nil {
 		fmt.Println("Load fail: ", err)
-		return
+		return nil, nil, nil, err
 	}
 
 	var fuseOpts *gofs.Options
@@ -64,14 +103,7 @@ func mount(cmd *cobra.Command, args []string) {
 	blob, err := object.CreateStorage(format.Storage)
 	if err != nil {
 		fmt.Println("CreateStorage fail: ", err)
-		return
-	}
-
-	if m != nil {
-		defer m.Shutdown()
-	}
-	if blob != nil {
-		defer object.Shutdown(blob)
+		return nil, nil, nil, err
 	}
 
 	syscall.Umask(0000)
@@ -79,27 +111,17 @@ func mount(cmd *cobra.Command, args []string) {
 	server, err := gofs.Mount(mp, root, fuseOpts)
 	if err != nil {
 		fmt.Println("Mount fail: ", err)
-		return
+		return nil, nil, nil, err
 	}
+
+	// server.Wait()
+	// fmt.Println("Server exited.")
 	fmt.Println("Unmount to stop the server.")
-	/*c := make(chan os.Signal)
+	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 	go func() {
 		<-c
 		server.Unmount()
-	}()*/
-
-	server.Wait()
-	fmt.Println("Server exited.")
-	//go server.Serve()
-}
-
-func init() {
-	mountCmd.Flags().StringP("meta", "m", "", "Path to the meta database.")
-	mountCmd.MarkFlagRequired("meta")
-
-	mountCmd.Flags().StringVarP(&user, "username", "u", "", "Username")
-	mountCmd.Flags().StringVarP(&pwd, "password", "p", "", "Password")
-	mountCmd.MarkFlagRequired("username")
-	mountCmd.MarkFlagsRequiredTogether("username", "password")
+	}()
+	return m, blob, server, nil
 }

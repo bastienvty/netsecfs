@@ -6,7 +6,13 @@ package cmd
 import (
 	"os"
 
+	"github.com/bastienvty/netsecfs/internal/cli"
 	"github.com/spf13/cobra"
+)
+
+var (
+	user string
+	pwd  string
 )
 
 // rootCmd represents the base command when called without any subcommands
@@ -14,18 +20,15 @@ var rootCmd = &cobra.Command{
 	Use:   "netsecfs",
 	Short: "Mount a FUSE filesystem that encrypts files on the fly.",
 	Long: `This filesystem allows you to mount a FUSE filesystem
-that encrypts and decrypts files based on a password.`,
-	// Uncomment the following line if your bare application
-	// has an action associated with it:
+that encrypts and decrypts files based on a password.
+
+Be sure you have initialized the filesystem with the
+init command before mounting it.`,
+	ValidArgs: []string{"username", "password"},
+	Args:      cobra.ExactArgs(1),
+	Example:   "netsecfs --meta /path/to/meta.db --username toto --password titi /tmp/nsfs",
 	Run: func(cmd *cobra.Command, args []string) {
-		version, err := cmd.Flags().GetBool("version")
-		if err != nil {
-			os.Exit(1)
-		}
-		if version {
-			println("netsecfs v0.1")
-			return
-		}
+		cli.StartConsole(cmd, args)
 	},
 }
 
@@ -42,6 +45,11 @@ func init() {
 	rootCmd.Flags().BoolP("version", "v", false, "Print the version number of netsecfs")
 
 	rootCmd.AddCommand(initCmd)
-	rootCmd.AddCommand(mountCmd)
-	rootCmd.AddCommand(shareCmd)
+
+	rootCmd.Flags().StringP("meta", "m", "", "Path to the meta database.")
+	rootCmd.MarkFlagRequired("meta")
+	rootCmd.Flags().StringVarP(&user, "username", "u", "", "Username")
+	rootCmd.Flags().StringVarP(&pwd, "password", "p", "", "Password")
+	rootCmd.MarkFlagRequired("username")
+	rootCmd.MarkFlagsRequiredTogether("username", "password")
 }

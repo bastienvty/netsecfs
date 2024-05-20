@@ -2,6 +2,9 @@ package fs
 
 import (
 	"context"
+	"crypto/rand"
+	"fmt"
+	"io"
 	"os"
 	"syscall"
 	"time"
@@ -189,7 +192,19 @@ func (n *Node) Create(ctx context.Context, name string, flags uint32, mode uint3
 	parent := meta.Ino(n.StableAttr().Ino)
 	var ino meta.Ino
 	n.meta.GetNextInode(ctx, &ino)
-	err := n.meta.Mknod(ctx, parent, name, meta.TypeFile, mode, &ino, attr)
+	/*key := make([]byte, 32)
+	if _, err := io.ReadFull(rand.Reader, key); err != nil {
+		return nil, nil, 0, fs.ToErrno(err)
+	}
+	fmt.Println("KEY:", key)
+	cipher, _ := n.enc.Encrypt(key, []byte(name))
+	fmt.Println("ENCRYPTED:", name, "->", string(cipher))
+	decipher, er := n.enc.Decrypt(key, cipher)
+	if er != nil {
+		fmt.Println("DECRYPT ERROR:", er)
+	}
+	fmt.Println("DECRYPTED:", cipher, "->", string(decipher))*/
+	err := n.meta.Mknod(ctx, parent, name, meta.TypeFile, mode, &ino, nil, attr)
 	if err != 0 {
 		return nil, nil, 0, err
 	}
@@ -268,7 +283,12 @@ func (n *Node) Mkdir(ctx context.Context, name string, mode uint32, out *fuse.En
 	parent := meta.Ino(n.StableAttr().Ino)
 	var ino meta.Ino
 	n.meta.GetNextInode(ctx, &ino)
-	err := n.meta.Mknod(ctx, parent, name, meta.TypeDirectory, mode, &ino, attr)
+	key := make([]byte, 32)
+	if _, err := io.ReadFull(rand.Reader, key); err != nil {
+		return nil, fs.ToErrno(err)
+	}
+	fmt.Println("KEY:", key)
+	err := n.meta.Mknod(ctx, parent, name, meta.TypeDirectory, mode, &ino, key, attr)
 	if err != 0 {
 		return nil, err
 	}
