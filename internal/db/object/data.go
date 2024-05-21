@@ -23,14 +23,14 @@ func (s *dbData) String() string {
 }
 
 type blob struct {
-	Inode uint64 `xorm:"pk"`
-	// Key      []byte    `xorm:"notnull"`
+	Inode    uint64    `xorm:"pk"`
+	Key      []byte    `xorm:"notnull"`
 	Size     int64     `xorm:"notnull"`
 	Modified time.Time `xorm:"notnull updated"`
 	Data     []byte    `xorm:"mediumblob"`
 }
 
-func (s *dbData) Get(inode uint64, key []byte, off int64) ([]byte, error) {
+func (s *dbData) Get(inode uint64, off int64, key *[]byte) ([]byte, error) {
 	var b = blob{Inode: inode}
 	ok, err := s.db.Get(&b)
 	if err != nil {
@@ -43,13 +43,14 @@ func (s *dbData) Get(inode uint64, key []byte, off int64) ([]byte, error) {
 		off = int64(len(b.Data))
 	}
 	data := b.Data[off:]
+	*key = b.Key
 	return data, nil
 }
 
-func (s *dbData) Put(inode uint64, key []byte, data []byte) error {
+func (s *dbData) Put(inode uint64, key []byte, data []byte, size int64) error {
 	now := time.Now()
-	// Key: []byte(key)
-	b := blob{Inode: inode, Data: data, Size: int64(len(data)), Modified: now}
+	// size of clear data (not encrypted) -> TODO: update length of encrypted data
+	b := blob{Inode: inode, Key: key, Data: data, Size: size, Modified: now}
 	n, err := s.db.Insert(&b)
 	if err != nil || n == 0 {
 		n, err = s.db.Update(&b, &blob{Inode: inode})

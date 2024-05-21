@@ -2,7 +2,7 @@ package fs
 
 import (
 	"context"
-	"fmt"
+	"crypto/rand"
 	"syscall"
 
 	"github.com/hanwen/go-fuse/v2/fs"
@@ -52,10 +52,18 @@ var _ = (fs.FileFsyncer)((*File)(nil))
 }*/
 
 func (f *File) Read(ctx context.Context, dest []byte, off int64) (fuse.ReadResult, syscall.Errno) {
-	fmt.Println("READ")
 	ino := f.n.StableAttr().Ino
-	data, error := f.n.obj.Get(ino, nil, off)
+	var keyCipher []byte
+	dataCipher, error := f.n.obj.Get(ino, off, &keyCipher)
 	if error != nil {
+		return nil, syscall.EIO
+	}
+	key, ok := f.n.enc.Decrypt(f.n.key, keyCipher)
+	if ok != nil {
+		return nil, syscall.EIO
+	}
+	data, ok := f.n.enc.Decrypt(key, dataCipher)
+	if ok != nil {
 		return nil, syscall.EIO
 	}
 	return fuse.ReadResultData(data), 0
@@ -63,21 +71,26 @@ func (f *File) Read(ctx context.Context, dest []byte, off int64) (fuse.ReadResul
 
 func (f *File) Write(ctx context.Context, data []byte, off int64) (written uint32, errno syscall.Errno) {
 	ino := f.n.StableAttr().Ino
-	/*text := string(data)
-	lines := strings.Split(text, "\n")
-	if len(lines) > 2 {
-		lines = lines[:len(lines)-2]
-		text = strings.Join(lines, "\n") + "\n"
-	}
-	fmt.Println("TEXT:", text)
-	newData := []byte(text)*/
-	// decData, _ := f.n.enc.Decrypt(nil, data)
 	err := f.n.meta.Write(ctx, ino, data, off)
 	if err != 0 {
 		return 0, err
 	}
-	// key := uuid.New().String()
-	error := f.n.obj.Put(ino, nil, data)
+	size := int64(len(data))
+	key := f.n.key
+	contentKey := make([]byte, 32)
+	_, ok := rand.Read(contentKey)
+	if ok != nil {
+		return 0, syscall.EIO
+	}
+	contentKeyCipher, ok := f.n.enc.Encrypt(key, contentKey)
+	if ok != nil {
+		return 0, syscall.EIO
+	}
+	dataCipher, ok := f.n.enc.Encrypt(contentKey, data)
+	if ok != nil {
+		return 0, syscall.EIO
+	}
+	error := f.n.obj.Put(ino, contentKeyCipher, dataCipher, size)
 	if error != nil {
 		return 0, syscall.EIO
 	}

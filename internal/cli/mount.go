@@ -34,7 +34,7 @@ func mount(user User, blob object.ObjectStorage, mp string) (*fuse.Server, error
 		Debug:   false,
 		Name:    "netsecfs",
 	}
-	// fuseOpts.MountOptions.Options = append(fuseOpts.MountOptions.Options, "noapplexattr", "noappledouble") // macOS
+	// fuseOpts.MountOptions.Options = append(fuseOpts.MountOptions.Options, "noapplexattr", "noappledouble") // macOS (optional)
 
 	syscall.Umask(0000)
 	root := fs.NewRootNode(user.m, blob, user.masterKey, user.rootKey)
