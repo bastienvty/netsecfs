@@ -1,7 +1,9 @@
 package meta
 
 import (
+	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -59,9 +61,13 @@ type namedNode struct {
 }
 
 type user struct {
-	Id       uint32 `xorm:"pk autoincr"`
-	Username string `xorm:"notnull unique"`
-	Password string `xorm:"notnull"`
+	Id        uint32 `xorm:"pk autoincr"`
+	Username  string `xorm:"notnull unique"`
+	Password  []byte `xorm:"notnull"`
+	Salt      []byte `xorm:"notnull"`
+	MasterKey []byte `xorm:"notnull"`
+	PrKey     []byte `xorm:"notnull"`
+	PubKey    []byte `xorm:"notnull"`
 }
 
 type dbMeta struct {
@@ -809,6 +815,88 @@ func (m *dbMeta) Write(ctx context.Context, inode uint64, data []byte, off int64
 		_, err = s.Cols("length", "mtime", "mtimensec").Update(&nodeAttr, &node{Inode: ino})
 		return err
 	}, ino))
+}
+
+func (m *dbMeta) CheckUser(username string) syscall.Errno {
+	return errno(m.roTxn(func(s *xorm.Session) error {
+		user := user{Username: username}
+		exist, err := s.Get(&user)
+		if err != nil {
+			return err
+		}
+		if exist {
+			return syscall.EEXIST
+		}
+		return nil
+	}))
+}
+
+func (m *dbMeta) CreateUser(username string, password, salt, masterKey, privKey, pubKey []byte) syscall.Errno {
+	return errno(m.txn(func(s *xorm.Session) error {
+		exist, err := s.Get(&user{Username: username})
+		if err != nil {
+			return err
+		}
+		if exist {
+			return syscall.EEXIST
+		}
+		hashRoot := sha256.New()
+		_, err = hashRoot.Write(password)
+		if err != nil {
+			return err
+		}
+		hashedPwd := hashRoot.Sum(nil)
+		user := &user{
+			Username:  username,
+			Password:  hashedPwd,
+			Salt:      salt,
+			MasterKey: masterKey,
+			PrKey:     privKey,
+			PubKey:    pubKey,
+		}
+		_, err = s.Insert(user)
+		return err
+	}))
+}
+
+func (m *dbMeta) VerifyUser(username string, password []byte, masterKey, privKey *[]byte) syscall.Errno {
+	return errno(m.roTxn(func(s *xorm.Session) error {
+		user := user{Username: username}
+		exist, err := s.Get(&user)
+		if err != nil {
+			return err
+		}
+		if !exist {
+			return syscall.ENOENT
+		}
+		hashRoot := sha256.New()
+		_, err = hashRoot.Write(password)
+		if err != nil {
+			return err
+		}
+		hashedPwd := hashRoot.Sum(nil)
+		if !bytes.Equal(hashedPwd, user.Password) {
+			return syscall.EACCES
+		}
+		*masterKey = user.MasterKey
+		*privKey = user.PrKey
+		return nil
+	}))
+}
+
+func (m *dbMeta) GetSalt(username string, salt *[]byte) syscall.Errno {
+	return errno(m.roTxn(func(s *xorm.Session) error {
+		user := user{Username: username}
+		exist, err := s.Get(&user)
+		if err != nil {
+			return err
+		}
+		if !exist {
+			return syscall.ENOENT
+		}
+		*salt = user.Salt
+		return nil
+	}))
 }
 
 func newSQLMeta(driver, addr string) (Meta, error) {

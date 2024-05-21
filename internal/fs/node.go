@@ -45,14 +45,17 @@ type Node struct {
 	meta   meta.Meta
 	obj    object.ObjectStorage
 	enc    crypto.CryptoHelper
+
+	// key []byte
 }
 
-func NewRootNode(meta meta.Meta, obj object.ObjectStorage) *Node {
+func NewRootNode(meta meta.Meta, obj object.ObjectStorage, key []byte) *Node {
 	return &Node{
 		inoMap: make(map[string]Ino),
 		meta:   meta,
 		obj:    obj,
 		enc:    crypto.CryptoHelper{},
+		// key:    key,
 	}
 }
 

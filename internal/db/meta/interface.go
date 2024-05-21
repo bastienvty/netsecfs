@@ -183,6 +183,11 @@ type Meta interface {
 	// Write put a slice of data on top of the given chunk.
 	Write(ctx context.Context, inode uint64, data []byte, off int64) syscall.Errno
 	GetKey(ctx context.Context, inode Ino, key *[]byte) syscall.Errno
+
+	CheckUser(username string) syscall.Errno
+	CreateUser(username string, password, salt, masterKey, privKey, pubKey []byte) syscall.Errno
+	VerifyUser(username string, password []byte, masterKey, privKey *[]byte) syscall.Errno
+	GetSalt(username string, salt *[]byte) syscall.Errno
 }
 
 func RegisterMeta(addr string) Meta {

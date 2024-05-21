@@ -14,7 +14,7 @@ import (
 	"github.com/hanwen/go-fuse/v2/fuse"
 )
 
-func mount(m meta.Meta, blob object.ObjectStorage, mp string) (*fuse.Server, error) {
+func mount(user User, blob object.ObjectStorage, mp string) (*fuse.Server, error) {
 	var fuseOpts *gofs.Options
 	sec := time.Second
 	fuseOpts = &gofs.Options{
@@ -37,7 +37,7 @@ func mount(m meta.Meta, blob object.ObjectStorage, mp string) (*fuse.Server, err
 	// fuseOpts.MountOptions.Options = append(fuseOpts.MountOptions.Options, "noapplexattr", "noappledouble") // macOS
 
 	syscall.Umask(0000)
-	root := fs.NewRootNode(m, blob)
+	root := fs.NewRootNode(user.m, blob, user.masterKey)
 	server, err := gofs.Mount(mp, root, fuseOpts)
 	if err != nil {
 		fmt.Println("Mount fail: ", err)
