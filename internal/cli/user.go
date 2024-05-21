@@ -89,7 +89,7 @@ func (u *User) CreateUser() bool {
 		return false
 	}
 
-	masterCipher, ok := u.enc.Encrypt(masterKey, rootKey)
+	rootCipher, ok := u.enc.Encrypt(masterKey, rootKey)
 	if ok != nil {
 		return false
 	}
@@ -98,7 +98,7 @@ func (u *User) CreateUser() bool {
 		return false
 	}
 
-	errno := u.m.CreateUser(u.username, hashMasterKey, salt, masterCipher, privCipher, pubKeyBytes)
+	errno := u.m.CreateUser(u.username, hashMasterKey, salt, rootCipher, privCipher, pubKeyBytes)
 	if errno != 0 {
 		return false
 	}
@@ -127,13 +127,13 @@ func (u *User) VerifyUser() bool {
 		return false
 	}
 	hashMasterKey := hashMaster.Sum(nil)
-	var masterCipher, privCipher []byte
-	errno = u.m.VerifyUser(u.username, hashMasterKey, &masterCipher, &privCipher)
+	var rootCipher, privCipher []byte
+	errno = u.m.VerifyUser(u.username, hashMasterKey, &rootCipher, &privCipher)
 	if errno != 0 {
 		return false
 	}
 
-	rootKey, ok := u.enc.Decrypt(masterKey, masterCipher)
+	rootKey, ok := u.enc.Decrypt(masterKey, rootCipher)
 	if ok != nil {
 		return false
 	}

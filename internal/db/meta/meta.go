@@ -61,13 +61,13 @@ type namedNode struct {
 }
 
 type user struct {
-	Id        uint32 `xorm:"pk autoincr"`
-	Username  string `xorm:"notnull unique"`
-	Password  []byte `xorm:"notnull"`
-	Salt      []byte `xorm:"notnull"`
-	MasterKey []byte `xorm:"notnull"`
-	PrKey     []byte `xorm:"notnull"`
-	PubKey    []byte `xorm:"notnull"`
+	Id       uint32 `xorm:"pk autoincr"`
+	Username string `xorm:"notnull unique"`
+	Password []byte `xorm:"notnull"`
+	Salt     []byte `xorm:"notnull"`
+	RootKey  []byte `xorm:"notnull"`
+	PrKey    []byte `xorm:"notnull"`
+	PubKey   []byte `xorm:"notnull"`
 }
 
 type dbMeta struct {
@@ -831,7 +831,7 @@ func (m *dbMeta) CheckUser(username string) syscall.Errno {
 	}))
 }
 
-func (m *dbMeta) CreateUser(username string, password, salt, masterKey, privKey, pubKey []byte) syscall.Errno {
+func (m *dbMeta) CreateUser(username string, password, salt, rootKey, privKey, pubKey []byte) syscall.Errno {
 	return errno(m.txn(func(s *xorm.Session) error {
 		exist, err := s.Get(&user{Username: username})
 		if err != nil {
@@ -847,19 +847,19 @@ func (m *dbMeta) CreateUser(username string, password, salt, masterKey, privKey,
 		}
 		hashedPwd := hashRoot.Sum(nil)
 		user := &user{
-			Username:  username,
-			Password:  hashedPwd,
-			Salt:      salt,
-			MasterKey: masterKey,
-			PrKey:     privKey,
-			PubKey:    pubKey,
+			Username: username,
+			Password: hashedPwd,
+			Salt:     salt,
+			RootKey:  rootKey,
+			PrKey:    privKey,
+			PubKey:   pubKey,
 		}
 		_, err = s.Insert(user)
 		return err
 	}))
 }
 
-func (m *dbMeta) VerifyUser(username string, password []byte, masterKey, privKey *[]byte) syscall.Errno {
+func (m *dbMeta) VerifyUser(username string, password []byte, rootKey, privKey *[]byte) syscall.Errno {
 	return errno(m.roTxn(func(s *xorm.Session) error {
 		user := user{Username: username}
 		exist, err := s.Get(&user)
@@ -878,7 +878,7 @@ func (m *dbMeta) VerifyUser(username string, password []byte, masterKey, privKey
 		if !bytes.Equal(hashedPwd, user.Password) {
 			return syscall.EACCES
 		}
-		*masterKey = user.MasterKey
+		*rootKey = user.RootKey
 		*privKey = user.PrKey
 		return nil
 	}))

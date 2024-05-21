@@ -46,16 +46,18 @@ type Node struct {
 	obj    object.ObjectStorage
 	enc    crypto.CryptoHelper
 
-	// key []byte
+	masterKey []byte
+	key       []byte
 }
 
-func NewRootNode(meta meta.Meta, obj object.ObjectStorage, key []byte) *Node {
+func NewRootNode(meta meta.Meta, obj object.ObjectStorage, masterKey, key []byte) *Node {
 	return &Node{
-		inoMap: make(map[string]Ino),
-		meta:   meta,
-		obj:    obj,
-		enc:    crypto.CryptoHelper{},
-		// key:    key,
+		inoMap:    make(map[string]Ino),
+		meta:      meta,
+		obj:       obj,
+		enc:       crypto.CryptoHelper{},
+		masterKey: masterKey,
+		key:       key,
 	}
 }
 
@@ -97,15 +99,21 @@ func (n *Node) Lookup(ctx context.Context, name string, out *fuse.EntryOut) (*fs
 	if err != 0 {
 		return nil, err
 	}
+	keyDec, e := n.enc.Decrypt(n.key, key)
+	if e != nil {
+		return nil, syscall.EINVAL
+	}
 	err = n.meta.Lookup(ctx, parent, ino, attr)
 	if err != 0 {
 		return nil, err
 	}
-	ops := Node{
-		inoMap: n.inoMap,
-		meta:   n.meta,
-		obj:    n.obj,
-		enc:    n.enc,
+	ops := &Node{
+		inoMap:    n.inoMap,
+		meta:      n.meta,
+		obj:       n.obj,
+		enc:       n.enc,
+		masterKey: n.masterKey,
+		key:       keyDec,
 	}
 	entry := &meta.Entry{Inode: ino, Attr: attr}
 	attrToStat(entry.Inode, entry.Attr, &out.Attr)
@@ -114,7 +122,7 @@ func (n *Node) Lookup(ctx context.Context, name string, out *fuse.EntryOut) (*fs
 		Ino:  uint64(entry.Inode),
 		// Gen:  1,
 	}
-	newNode := n.NewInode(ctx, &ops, st)
+	newNode := n.NewInode(ctx, ops, st)
 	return newNode, 0
 }
 
@@ -215,7 +223,11 @@ func (n *Node) Create(ctx context.Context, name string, flags uint32, mode uint3
 	if ok != nil {
 		return nil, nil, 0, syscall.EINVAL
 	}
-	err := n.meta.Mknod(ctx, parent, meta.TypeFile, mode, &ino, cipher, key, attr)
+	keyCipher, ok := n.enc.Encrypt(n.key, key)
+	if ok != nil {
+		return nil, nil, 0, syscall.EINVAL
+	}
+	err := n.meta.Mknod(ctx, parent, meta.TypeFile, mode, &ino, cipher, keyCipher, attr)
 	if err != 0 {
 		return nil, nil, 0, err
 	}
@@ -227,10 +239,12 @@ func (n *Node) Create(ctx context.Context, name string, flags uint32, mode uint3
 	entry := &meta.Entry{Inode: ino, Attr: attr}
 	attrToStat(entry.Inode, entry.Attr, &out.Attr)
 	ops := &Node{
-		inoMap: n.inoMap,
-		meta:   n.meta,
-		obj:    n.obj,
-		enc:    n.enc,
+		inoMap:    n.inoMap,
+		meta:      n.meta,
+		obj:       n.obj,
+		enc:       n.enc,
+		masterKey: n.masterKey,
+		key:       key,
 	}
 	st := fs.StableAttr{
 		Mode: attr.SMode(),
@@ -281,7 +295,14 @@ func (n *Node) Readdir(ctx context.Context) (fs.DirStream, syscall.Errno) {
 	var de fuse.DirEntry
 	var name []byte
 	for _, e := range entries {
-		name, _ = n.enc.Decrypt(e.Key, e.Name)
+		key, ok := n.enc.Decrypt(n.key, e.Key)
+		if ok != nil {
+			return nil, syscall.EINVAL
+		}
+		name, ok = n.enc.Decrypt(key, e.Name)
+		if ok != nil {
+			return nil, syscall.EINVAL
+		}
 		if string(name) != "." && string(name) != ".." {
 			if n.inoMap != nil {
 				n.inoMap[string(name)] = e.Inode
@@ -314,25 +335,31 @@ func (n *Node) Mkdir(ctx context.Context, name string, mode uint32, out *fuse.En
 	if ok != nil {
 		return nil, syscall.EINVAL
 	}
-	err := n.meta.Mknod(ctx, parent, meta.TypeDirectory, mode, &ino, cipher, key, attr)
+	keyCipher, ok := n.enc.Encrypt(n.key, key)
+	if ok != nil {
+		return nil, syscall.EINVAL
+	}
+	err := n.meta.Mknod(ctx, parent, meta.TypeDirectory, mode, &ino, cipher, keyCipher, attr)
 	if err != 0 {
 		return nil, err
 	}
 	// v.UpdateLength(inode, attr)
 	entry := &meta.Entry{Inode: ino, Attr: attr}
 	attrToStat(entry.Inode, entry.Attr, &out.Attr)
-	ops := Node{
-		inoMap: make(map[string]Ino),
-		meta:   n.meta,
-		obj:    n.obj,
-		enc:    n.enc,
+	ops := &Node{
+		inoMap:    make(map[string]Ino),
+		meta:      n.meta,
+		obj:       n.obj,
+		enc:       n.enc,
+		masterKey: n.masterKey,
+		key:       key,
 	}
 	st := fs.StableAttr{
 		Mode: attr.SMode(),
 		Ino:  uint64(entry.Inode),
 		// Gen:  1,
 	}
-	node = n.NewInode(ctx, &ops, st)
+	node = n.NewInode(ctx, ops, st)
 	// n.AddChild(name, node, true)
 	return node, 0
 }

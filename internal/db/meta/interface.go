@@ -185,8 +185,8 @@ type Meta interface {
 	GetKey(ctx context.Context, inode Ino, key *[]byte) syscall.Errno
 
 	CheckUser(username string) syscall.Errno
-	CreateUser(username string, password, salt, masterKey, privKey, pubKey []byte) syscall.Errno
-	VerifyUser(username string, password []byte, masterKey, privKey *[]byte) syscall.Errno
+	CreateUser(username string, password, salt, rootKey, privKey, pubKey []byte) syscall.Errno
+	VerifyUser(username string, password []byte, rootKey, privKey *[]byte) syscall.Errno
 	GetSalt(username string, salt *[]byte) syscall.Errno
 }
 
