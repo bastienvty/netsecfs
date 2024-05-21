@@ -29,8 +29,6 @@ func Initialize(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 	addr, _ := cmd.Flags().GetString("meta")
-	username, _ := cmd.Flags().GetString("username")
-	pwd, _ := cmd.Flags().GetString("password")
 	mp := args[0]
 
 	m := meta.RegisterMeta(addr)
@@ -51,20 +49,14 @@ func Initialize(cmd *cobra.Command, args []string) {
 		defer object.Shutdown(blob)
 	}
 
-	user := User{
-		username: username,
-		password: pwd,
-		m:        m,
-		enc:      crypto.CryptoHelper{},
-	}
-
-	startConsole(user, blob, mp)
+	startConsole(m, blob, mp)
 }
 
-func startConsole(user User, blob object.ObjectStorage, mp string) {
+func startConsole(m meta.Meta, blob object.ObjectStorage, mp string) {
 	scanner := bufio.NewScanner(os.Stdin)
 	var server *fuse.Server
 	var err error
+	var user User
 	for {
 		fmt.Print(input)
 		scanned := scanner.Scan()
@@ -82,6 +74,20 @@ func startConsole(user User, blob object.ObjectStorage, mp string) {
 		case "help":
 			fmt.Println("Commands: mount, umount, share, exit")
 		case "signup":
+			if isLogged {
+				fmt.Println("User already logged in.")
+				continue
+			}
+			if len(fields) != 3 {
+				fmt.Println("Usage: signup <username> <password>")
+				continue
+			}
+			user := User{
+				username: fields[1],
+				password: fields[2],
+				m:        m,
+				enc:      crypto.CryptoHelper{},
+			}
 			create := user.createUser()
 			if !create {
 				fmt.Println("User creation failed. Please try again.")
@@ -93,6 +99,16 @@ func startConsole(user User, blob object.ObjectStorage, mp string) {
 			if isLogged {
 				fmt.Println("User already logged in.")
 				continue
+			}
+			if len(fields) != 3 {
+				fmt.Println("Usage: login <username> <password>")
+				continue
+			}
+			user = User{
+				username: fields[1],
+				password: fields[2],
+				m:        m,
+				enc:      crypto.CryptoHelper{},
 			}
 			verify := user.verifyUser()
 			if !verify {
@@ -123,6 +139,14 @@ func startConsole(user User, blob object.ObjectStorage, mp string) {
 		case "ls":
 			fmt.Println("Not implemented but would list all users.")
 		case "mount":
+			if isMounted {
+				fmt.Println("Already mounted.")
+				continue
+			}
+			if !isLogged {
+				fmt.Println("User not logged in.")
+				continue
+			}
 			server, err = mount(user, blob, mp)
 			if err != nil || server == nil {
 				fmt.Println("Mount fail: ", err)

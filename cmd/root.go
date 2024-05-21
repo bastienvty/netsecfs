@@ -24,9 +24,9 @@ that encrypts and decrypts files based on a password.
 
 Be sure you have initialized the filesystem with the
 init command before mounting it.`,
-	ValidArgs: []string{"username", "password"},
+	ValidArgs: []string{"meta"},
 	Args:      cobra.ExactArgs(1),
-	Example:   "netsecfs --meta /path/to/meta.db --username toto --password titi /tmp/nsfs",
+	Example:   "netsecfs --meta /path/to/meta.db /tmp/nsfs",
 	Run: func(cmd *cobra.Command, args []string) {
 		cli.Initialize(cmd, args)
 	},
@@ -48,8 +48,4 @@ func init() {
 
 	rootCmd.Flags().StringP("meta", "m", "", "Path to the meta database.")
 	rootCmd.MarkFlagRequired("meta")
-	rootCmd.Flags().StringVarP(&user, "username", "u", "", "Username")
-	rootCmd.Flags().StringVarP(&pwd, "password", "p", "", "Password")
-	rootCmd.MarkFlagRequired("username")
-	rootCmd.MarkFlagsRequiredTogether("username", "password")
 }
