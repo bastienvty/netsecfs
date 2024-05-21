@@ -28,7 +28,7 @@ init command before mounting it.`,
 	Args:      cobra.ExactArgs(1),
 	Example:   "netsecfs --meta /path/to/meta.db --username toto --password titi /tmp/nsfs",
 	Run: func(cmd *cobra.Command, args []string) {
-		cli.StartConsole(cmd, args)
+		cli.Initialize(cmd, args)
 	},
 }
 
