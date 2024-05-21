@@ -899,6 +899,31 @@ func (m *dbMeta) GetSalt(username string, salt *[]byte) syscall.Errno {
 	}))
 }
 
+func (m *dbMeta) ChangePassword(username string, password, salt, rootKey, privKey []byte) syscall.Errno {
+	return errno(m.txn(func(s *xorm.Session) error {
+		userToChange := user{Username: username}
+		exist, err := s.Get(&userToChange)
+		if err != nil {
+			return err
+		}
+		if !exist {
+			return syscall.ENOENT
+		}
+		hashRoot := sha256.New()
+		_, err = hashRoot.Write(password)
+		if err != nil {
+			return err
+		}
+		hashedPwd := hashRoot.Sum(nil)
+		userToChange.Password = hashedPwd
+		userToChange.Salt = salt
+		userToChange.RootKey = rootKey
+		userToChange.PrKey = privKey
+		_, err = s.Cols("password", "salt", "root_key", "pr_key").Update(&userToChange, &user{Username: username})
+		return err
+	}))
+}
+
 func newSQLMeta(driver, addr string) (Meta, error) {
 	engine, err := xorm.NewEngine(driver, addr)
 	if err != nil {

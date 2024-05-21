@@ -43,7 +43,7 @@ type User struct {
 
 	m          meta.Meta
 	enc        crypto.CryptoHelper
-	PrivateKey *rsa.PrivateKey
+	privateKey *rsa.PrivateKey
 	masterKey  []byte
 	rootKey    []byte
 }
@@ -53,7 +53,7 @@ func (u *User) checkUser() bool {
 	return err != 0
 }
 
-func (u *User) CreateUser() bool {
+func (u *User) createUser() bool {
 	if u.username == "" || u.password == "" {
 		return false
 	}
@@ -105,11 +105,11 @@ func (u *User) CreateUser() bool {
 
 	u.masterKey = masterKey
 	u.rootKey = rootKey
-	u.PrivateKey = privKey
+	u.privateKey = privKey
 	return true
 }
 
-func (u *User) VerifyUser() bool {
+func (u *User) verifyUser() bool {
 	if u.username == "" || u.password == "" {
 		return false
 	}
@@ -149,6 +149,45 @@ func (u *User) VerifyUser() bool {
 
 	u.masterKey = masterKey
 	u.rootKey = rootKey
-	u.PrivateKey = privKey
+	u.privateKey = privKey
+	return true
+}
+
+func (u *User) changePassword(newPassword string) bool {
+	if u.username == "" || u.password == "" || newPassword == "" {
+		return false
+	}
+	p := defaultParams()
+	salt := make([]byte, p.saltLength)
+	_, err := rand.Read(salt)
+	if err != nil {
+		return false
+	}
+	newMasterKey := argon2.IDKey([]byte(newPassword), salt, p.iterations, p.memory, p.parallelism, p.keyLength)
+	hashMaster := sha256.New()
+	_, err = hashMaster.Write(newMasterKey)
+	if err != nil {
+		return false
+	}
+	hashMasterKey := hashMaster.Sum(nil)
+
+	privKeyBytes := x509.MarshalPKCS1PrivateKey(u.privateKey)
+
+	rootCipher, ok := u.enc.Encrypt(newMasterKey, u.rootKey)
+	if ok != nil {
+		return false
+	}
+	privCipher, ok := u.enc.Encrypt(newMasterKey, privKeyBytes)
+	if ok != nil {
+		return false
+	}
+
+	errno := u.m.ChangePassword(u.username, hashMasterKey, salt, rootCipher, privCipher)
+	if errno != 0 {
+		return false
+	}
+
+	u.password = newPassword
+	u.masterKey = newMasterKey
 	return true
 }

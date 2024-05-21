@@ -188,6 +188,7 @@ type Meta interface {
 	CreateUser(username string, password, salt, rootKey, privKey, pubKey []byte) syscall.Errno
 	VerifyUser(username string, password []byte, rootKey, privKey *[]byte) syscall.Errno
 	GetSalt(username string, salt *[]byte) syscall.Errno
+	ChangePassword(username string, password, salt, rootKey, privKey []byte) syscall.Errno
 }
 
 func RegisterMeta(addr string) Meta {

@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/bastienvty/netsecfs/internal/crypto"
 	"github.com/bastienvty/netsecfs/internal/db/meta"
@@ -71,7 +72,8 @@ func startConsole(user User, blob object.ObjectStorage, mp string) {
 			return
 		}
 		line := scanner.Text()
-		switch line {
+		fields := strings.Fields(line)
+		switch fields[0] {
 		case "exit":
 			if isMounted {
 				fmt.Println("It may be still mounted. Please unmount it.")
@@ -80,7 +82,7 @@ func startConsole(user User, blob object.ObjectStorage, mp string) {
 		case "help":
 			fmt.Println("Commands: mount, umount, share, exit")
 		case "signup":
-			create := user.CreateUser()
+			create := user.createUser()
 			if !create {
 				fmt.Println("User creation failed. Please try again.")
 				continue
@@ -92,13 +94,32 @@ func startConsole(user User, blob object.ObjectStorage, mp string) {
 				fmt.Println("User already logged in.")
 				continue
 			}
-			verify := user.VerifyUser()
+			verify := user.verifyUser()
 			if !verify {
 				fmt.Println("User verification failed. Please try again.")
 				continue
 			}
 			isLogged = true
 			fmt.Printf("User %s logged in.\n", user.username)
+		case "passwd":
+			if !isLogged {
+				fmt.Println("User not logged in.")
+				continue
+			}
+			if isMounted {
+				fmt.Println("Unmount before changing password.")
+				continue
+			}
+			if len(fields) != 2 {
+				fmt.Println("Usage: passwd <new_password>")
+				continue
+			}
+			changed := user.changePassword(fields[1])
+			if !changed {
+				fmt.Println("Password change failed. Please try again.")
+				continue
+			}
+			fmt.Println("Password changed successfully.")
 		case "ls":
 			fmt.Println("Not implemented but would list all users.")
 		case "mount":
