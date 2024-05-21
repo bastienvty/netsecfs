@@ -82,7 +82,7 @@ func startConsole(m meta.Meta, blob object.ObjectStorage, mp string) {
 				fmt.Println("Usage: signup <username> <password>")
 				continue
 			}
-			user := User{
+			user = User{
 				username: fields[1],
 				password: fields[2],
 				m:        m,
