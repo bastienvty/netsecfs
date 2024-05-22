@@ -52,6 +52,7 @@ type node struct {
 	Length    uint64 `xorm:"notnull"`
 	Rdev      uint32
 	Parent    Ino
+	Owner     uint32
 }
 
 type namedNode struct {
@@ -68,6 +69,13 @@ type user struct {
 	RootKey  []byte `xorm:"notnull"`
 	PrKey    []byte `xorm:"notnull"`
 	PubKey   []byte `xorm:"notnull"`
+}
+
+type shared struct {
+	Id    int64  `xorm:"pk autoincr"`
+	Inode Ino    `xorm:"notnull"`
+	User  uint32 `xorm:"notnull"`
+	Key   []byte `xorm:"notnull"`
 }
 
 type dbMeta struct {
@@ -133,11 +141,11 @@ func (m *dbMeta) Init(format *Format) error {
 	if err := m.db.Sync2(new(setting)); err != nil {
 		return fmt.Errorf("create table setting: %s", err)
 	}
-	if err := m.db.Sync2(new(edge)); err != nil {
-		return fmt.Errorf("create table edge: %s", err)
+	if err := m.db.Sync2(new(edge), new(node)); err != nil {
+		return fmt.Errorf("create table edge, node: %s", err)
 	}
-	if err := m.db.Sync2(new(node), new(user)); err != nil {
-		return fmt.Errorf("create table node, user: %s", err)
+	if err := m.db.Sync2(new(user), new(shared)); err != nil {
+		return fmt.Errorf("create table user, shared: %s", err)
 	}
 
 	var s = setting{Name: "format"}
@@ -346,6 +354,19 @@ func (m *dbMeta) GetNextInode(ctx context.Context, lastIno *Ino) error {
 	})
 }
 
+func (m *dbMeta) GetUserId(username string, uid *uint32) error {
+	return m.roTxn(func(s *xorm.Session) error {
+		var u = user{Username: username}
+		if ok, err := s.Get(&u); err != nil {
+			return err
+		} else if !ok {
+			return syscall.ENOENT
+		}
+		*uid = u.Id
+		return nil
+	})
+}
+
 func (m *dbMeta) GetAttr(ctx context.Context, inode Ino, attr *Attr) syscall.Errno {
 	return errno(m.roTxn(func(s *xorm.Session) error {
 		var n = node{Inode: inode}
@@ -496,7 +517,7 @@ func (m *dbMeta) Lookup(ctx context.Context, parent Ino, inode Ino, attr *Attr) 
 	return 0
 }
 
-func (m *dbMeta) Mknod(ctx context.Context, parent Ino, _type uint8, mode uint32, inode *Ino, name, key []byte, attr *Attr) syscall.Errno {
+func (m *dbMeta) Mknod(ctx context.Context, parent Ino, _type uint8, mode, id uint32, inode *Ino, name, key []byte, attr *Attr) syscall.Errno {
 	return errno(m.txn(func(s *xorm.Session) error {
 		var pn = node{Inode: parent}
 		ok, err := s.Get(&pn)
@@ -561,6 +582,7 @@ func (m *dbMeta) Mknod(ctx context.Context, parent Ino, _type uint8, mode uint32
 		n.Mtimensec = int16(now % 1e3)
 		n.Ctimensec = int16(now % 1e3)
 		n.Parent = parent
+		n.Owner = id
 		if _type == TypeDirectory {
 			n.Nlink = 2
 			n.Mode |= 0755
@@ -617,7 +639,7 @@ func (m *dbMeta) joinNodes(parent Ino, nns *[]namedNode) syscall.Errno {
 	}))
 }
 
-func (m *dbMeta) Readdir(ctx context.Context, inode Ino, plus uint8, entries *[]*Entry) syscall.Errno {
+func (m *dbMeta) Readdir(ctx context.Context, inode Ino, userId uint32, entries *[]*Entry) syscall.Errno {
 	/*s = s.Table(&edge{})
 	if plus != 0 {
 		s = s.Join("INNER", &node{}, "nsfs_edge.inode=nsfs_node.inode")
@@ -634,17 +656,16 @@ func (m *dbMeta) Readdir(ctx context.Context, inode Ino, plus uint8, entries *[]
 			logger.Errorf("Corrupt entry with empty name: inode %d parent %d", n.Inode, inode)
 			continue
 		}
+		if inode == 1 && userId != n.Owner && !bytes.Equal(n.Name, []byte("shared")) {
+			continue
+		}
 		entry := &Entry{
 			Inode: n.Inode,
 			Name:  n.Name,
 			Key:   n.Key,
 			Attr:  &Attr{},
 		}
-		if plus != 0 {
-			m.parseAttr(&n.node, entry.Attr)
-		} else {
-			entry.Attr.Typ = n.Type
-		}
+		m.parseAttr(&n.node, entry.Attr)
 		*entries = append(*entries, entry)
 	}
 	return err

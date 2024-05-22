@@ -48,9 +48,15 @@ type Node struct {
 
 	masterKey []byte
 	key       []byte
+	userId    uint32
 }
 
-func NewRootNode(meta meta.Meta, obj object.ObjectStorage, masterKey, key []byte) *Node {
+func NewRootNode(meta meta.Meta, obj object.ObjectStorage, masterKey, key []byte, username string) *Node {
+	var userId uint32
+	ok := meta.GetUserId(username, &userId)
+	if ok != nil {
+		return nil
+	}
 	return &Node{
 		inoMap:    make(map[string]Ino),
 		meta:      meta,
@@ -58,6 +64,7 @@ func NewRootNode(meta meta.Meta, obj object.ObjectStorage, masterKey, key []byte
 		enc:       crypto.CryptoHelper{},
 		masterKey: masterKey,
 		key:       key,
+		userId:    userId,
 	}
 }
 
@@ -114,6 +121,7 @@ func (n *Node) Lookup(ctx context.Context, name string, out *fuse.EntryOut) (*fs
 		enc:       n.enc,
 		masterKey: n.masterKey,
 		key:       keyDec,
+		userId:    n.userId,
 	}
 	entry := &meta.Entry{Inode: ino, Attr: attr}
 	attrToStat(entry.Inode, entry.Attr, &out.Attr)
@@ -227,7 +235,7 @@ func (n *Node) Create(ctx context.Context, name string, flags uint32, mode uint3
 	if ok != nil {
 		return nil, nil, 0, syscall.EINVAL
 	}
-	err := n.meta.Mknod(ctx, parent, meta.TypeFile, mode, &ino, cipher, keyCipher, attr)
+	err := n.meta.Mknod(ctx, parent, meta.TypeFile, mode, n.userId, &ino, cipher, keyCipher, attr)
 	if err != 0 {
 		return nil, nil, 0, err
 	}
@@ -235,7 +243,6 @@ func (n *Node) Create(ctx context.Context, name string, flags uint32, mode uint3
 	if !exist {
 		n.inoMap[name] = ino
 	}
-	// v.UpdateLength(inode, attr)
 	entry := &meta.Entry{Inode: ino, Attr: attr}
 	attrToStat(entry.Inode, entry.Attr, &out.Attr)
 	ops := &Node{
@@ -245,6 +252,7 @@ func (n *Node) Create(ctx context.Context, name string, flags uint32, mode uint3
 		enc:       n.enc,
 		masterKey: n.masterKey,
 		key:       key,
+		userId:    n.userId,
 	}
 	st := fs.StableAttr{
 		Mode: attr.SMode(),
@@ -291,7 +299,7 @@ func (n *Node) Readdir(ctx context.Context) (fs.DirStream, syscall.Errno) {
 		Name:  []byte(".."),
 		Attr:  &meta.Attr{Typ: meta.TypeDirectory},
 	})
-	st := n.meta.Readdir(ctx, inode, 1, &entries)
+	st := n.meta.Readdir(ctx, inode, n.userId, &entries)
 	var de fuse.DirEntry
 	var name []byte
 	for _, e := range entries {
@@ -339,11 +347,10 @@ func (n *Node) Mkdir(ctx context.Context, name string, mode uint32, out *fuse.En
 	if ok != nil {
 		return nil, syscall.EINVAL
 	}
-	err := n.meta.Mknod(ctx, parent, meta.TypeDirectory, mode, &ino, cipher, keyCipher, attr)
+	err := n.meta.Mknod(ctx, parent, meta.TypeDirectory, mode, n.userId, &ino, cipher, keyCipher, attr)
 	if err != 0 {
 		return nil, err
 	}
-	// v.UpdateLength(inode, attr)
 	entry := &meta.Entry{Inode: ino, Attr: attr}
 	attrToStat(entry.Inode, entry.Attr, &out.Attr)
 	ops := &Node{
@@ -353,6 +360,7 @@ func (n *Node) Mkdir(ctx context.Context, name string, mode uint32, out *fuse.En
 		enc:       n.enc,
 		masterKey: n.masterKey,
 		key:       key,
+		userId:    n.userId,
 	}
 	st := fs.StableAttr{
 		Mode: attr.SMode(),

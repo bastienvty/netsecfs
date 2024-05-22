@@ -88,11 +88,14 @@ func startConsole(m meta.Meta, blob object.ObjectStorage, mp string) {
 				m:        m,
 				enc:      crypto.CryptoHelper{},
 			}
+			// startTime := time.Now()
 			create := user.createUser()
 			if !create {
 				fmt.Println("User creation failed. Please try again.")
 				continue
 			}
+			// duration := time.Since(startTime)
+			// fmt.Printf("The signup took %s to complete.\n", duration)
 			fmt.Printf("User %s created.\n", user.username)
 			isLogged = true
 		case "login":
@@ -166,7 +169,19 @@ func startConsole(m meta.Meta, blob object.ObjectStorage, mp string) {
 			fmt.Println("Umount successfull.")
 			isMounted = false
 		case "share":
-			share.Share(mp)
+			if !isMounted {
+				fmt.Println("Mount before sharing.")
+				continue
+			}
+			if !isLogged {
+				fmt.Println("User not logged in.")
+				continue
+			}
+			if len(fields) != 2 {
+				fmt.Println("Usage: share <path>")
+				continue
+			}
+			share.Share(fields[1], user.rootKey)
 		case "unshare":
 			// share.Unshare(mp)
 		}

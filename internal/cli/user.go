@@ -20,8 +20,8 @@ type params struct {
 }
 
 const (
-	DefaultMemory      = 64 * 1024
-	DefaultIterations  = 3
+	DefaultMemory      = 512 * 1024 // 512 MB
+	DefaultIterations  = 5          // increase time to login
 	DefaultParallelism = 2
 	DefaultSaltLength  = 16
 	DefaultKeyLength   = 32
