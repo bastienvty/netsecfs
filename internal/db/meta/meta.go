@@ -74,6 +74,7 @@ type user struct {
 type shared struct {
 	Id    int64  `xorm:"pk autoincr"`
 	Inode Ino    `xorm:"notnull"`
+	Name  []byte `xorm:"unique(edge) varbinary(255) notnull"`
 	User  uint32 `xorm:"notnull"`
 	Key   []byte `xorm:"notnull"`
 }
@@ -367,6 +368,19 @@ func (m *dbMeta) GetUserId(username string, uid *uint32) error {
 	})
 }
 
+func (m *dbMeta) GetUserPublicKey(username string, pubKey *[]byte) error {
+	return m.roTxn(func(s *xorm.Session) error {
+		var u = user{Username: username}
+		if ok, err := s.Get(&u); err != nil {
+			return err
+		} else if !ok {
+			return syscall.ENOENT
+		}
+		*pubKey = u.PubKey
+		return nil
+	})
+}
+
 func (m *dbMeta) GetAttr(ctx context.Context, inode Ino, attr *Attr) syscall.Errno {
 	return errno(m.roTxn(func(s *xorm.Session) error {
 		var n = node{Inode: inode}
@@ -484,10 +498,32 @@ func (m *dbMeta) GetKey(ctx context.Context, inode Ino, key *[]byte) syscall.Err
 	}))
 }
 
-func (m *dbMeta) getNode(parent Ino, inode Ino, nn *namedNode) syscall.Errno {
+func (m *dbMeta) GetSharedKey(ctx context.Context, userId uint32, inode Ino, key *[]byte) syscall.Errno {
 	return errno(m.roTxn(func(s *xorm.Session) error {
-		var edge = edge{Parent: parent, Inode: inode}
-		exist, err := s.Get(&edge)
+		var share = shared{Inode: inode, User: userId}
+		ok, err := s.Get(&share)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return syscall.ENOENT
+		}
+		*key = share.Key
+		return nil
+	}))
+}
+
+func (m *dbMeta) Lookup(ctx context.Context, userId uint32, parent, inode Ino, attr *Attr) syscall.Errno {
+	return errno(m.roTxn(func(s *xorm.Session) error {
+		var exist bool
+		var err error
+		if parent == SharedInode {
+			var share = shared{Inode: inode, User: userId}
+			exist, err = s.Get(&share)
+		} else {
+			var edge = edge{Parent: parent, Inode: inode}
+			exist, err = s.Get(&edge)
+		}
 		if err != nil {
 			log.Fatalf("Failed to find nodes: %v", err)
 			return err
@@ -495,26 +531,16 @@ func (m *dbMeta) getNode(parent Ino, inode Ino, nn *namedNode) syscall.Errno {
 			return syscall.ENOENT
 		}
 		var node node
-		exist, err = s.Where("inode = ?", edge.Inode).Get(&node)
+		exist, err = s.Where("inode = ?", inode).Get(&node)
 		if err != nil {
 			log.Fatalf("Failed to find nodes: %v", err)
 			return err
 		} else if !exist {
 			return syscall.ENOENT
 		}
-		*nn = namedNode{node: node}
+		m.parseAttr(&node, attr)
 		return nil
 	}))
-}
-
-func (m *dbMeta) Lookup(ctx context.Context, parent Ino, inode Ino, attr *Attr) syscall.Errno {
-	nn := namedNode{}
-	err := m.getNode(parent, inode, &nn)
-	if err != 0 {
-		return err
-	}
-	m.parseAttr(&nn.node, attr)
-	return 0
 }
 
 func (m *dbMeta) Mknod(ctx context.Context, parent Ino, _type uint8, mode, id uint32, inode *Ino, name, key []byte, attr *Attr) syscall.Errno {
@@ -639,6 +665,36 @@ func (m *dbMeta) joinNodes(parent Ino, nns *[]namedNode) syscall.Errno {
 	}))
 }
 
+func (m *dbMeta) joinSharedNodes(userId uint32, nns *[]namedNode) syscall.Errno {
+	return errno(m.roTxn(func(s *xorm.Session) error {
+		var nodes []node
+		err := s.SQL("SELECT * FROM `nsfs_shared` INNER JOIN `nsfs_node` ON nsfs_shared.inode=nsfs_node.inode WHERE nsfs_shared.user = ?", userId).Find(&nodes)
+		if err != nil {
+			log.Fatalf("Failed to find nodes: %v", err)
+		}
+		var shares []shared
+		err = s.SQL("SELECT * FROM `nsfs_shared` INNER JOIN `nsfs_node` ON nsfs_shared.inode=nsfs_node.inode WHERE nsfs_shared.user = ?", userId).Find(&shares)
+		if err != nil {
+			log.Fatalf("Failed to find edges: %v", err)
+		}
+		if len(nodes) != len(shares) {
+			log.Fatalf("Nodes and edges are not equal: %d %d", len(nodes), len(shares))
+		}
+		for _, n := range nodes {
+			nn := namedNode{node: n}
+			for _, sh := range shares {
+				if sh.Inode == n.Inode {
+					nn.Name = sh.Name
+					nn.Key = sh.Key
+					break
+				}
+			}
+			*nns = append(*nns, nn)
+		}
+		return nil
+	}))
+}
+
 func (m *dbMeta) Readdir(ctx context.Context, inode Ino, userId uint32, entries *[]*Entry) syscall.Errno {
 	/*s = s.Table(&edge{})
 	if plus != 0 {
@@ -650,7 +706,12 @@ func (m *dbMeta) Readdir(ctx context.Context, inode Ino, userId uint32, entries 
 	}*/
 	// The join does not seem to work properly so doing some "brute force"
 	nodes := make([]namedNode, 0)
-	err := m.joinNodes(inode, &nodes)
+	var err syscall.Errno
+	if inode == SharedInode {
+		err = m.joinSharedNodes(userId, &nodes)
+	} else {
+		err = m.joinNodes(inode, &nodes)
+	}
 	for _, n := range nodes {
 		if len(n.Name) == 0 {
 			logger.Errorf("Corrupt entry with empty name: inode %d parent %d", n.Inode, inode)
@@ -942,6 +1003,50 @@ func (m *dbMeta) ChangePassword(username string, password, salt, rootKey, privKe
 		userToChange.PrKey = privKey
 		_, err = s.Cols("password", "salt", "root_key", "pr_key").Update(&userToChange, &user{Username: username})
 		return err
+	}))
+}
+
+func (m *dbMeta) ShareDir(userId uint32, inode Ino, name, key []byte) syscall.Errno {
+	return errno(m.txn(func(s *xorm.Session) error {
+		user := user{Id: userId}
+		exist, err := s.Get(&user)
+		if err != nil {
+			return err
+		}
+		if !exist {
+			return syscall.ENOENT
+		}
+		shared := shared{Inode: inode, Name: name, User: userId, Key: key}
+		_, err = s.Insert(shared)
+		return err
+	}))
+}
+
+func (m *dbMeta) GetPathKey(inode Ino, keys *[][]byte) syscall.Errno {
+	return errno(m.txn(func(s *xorm.Session) error {
+		e := edge{Inode: inode}
+		exist, err := s.Get(&e)
+		if err != nil {
+			return err
+		}
+		if !exist {
+			return syscall.ENOENT
+		}
+		*keys = append(*keys, e.Key)
+		parent := e.Parent
+		for parent != 1 {
+			e = edge{Inode: parent}
+			exist, err = s.Get(&e)
+			if err != nil {
+				return err
+			}
+			if !exist {
+				return syscall.ENOENT
+			}
+			*keys = append(*keys, e.Key)
+			parent = e.Parent
+		}
+		return nil
 	}))
 }
 

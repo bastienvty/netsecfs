@@ -37,7 +37,7 @@ func mount(user User, blob object.ObjectStorage, mp string) (*fuse.Server, error
 	// fuseOpts.MountOptions.Options = append(fuseOpts.MountOptions.Options, "noapplexattr", "noappledouble") // macOS (optional)
 
 	syscall.Umask(0000)
-	root := fs.NewRootNode(user.m, blob, user.masterKey, user.rootKey, user.username)
+	root := fs.NewRootNode(user.m, blob, user.privateKey, user.rootKey, user.username)
 	server, err := gofs.Mount(mp, root, fuseOpts)
 	if err != nil {
 		fmt.Println("Mount fail: ", err)

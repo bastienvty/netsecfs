@@ -4,6 +4,8 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
+	"crypto/rsa"
+	"crypto/sha256"
 	"io"
 )
 
@@ -67,4 +69,38 @@ func (c *CryptoHelper) Decrypt(key, ciphertext []byte) ([]byte, error) {
 	plaintext, err := aesgcm.Open(nil, nonce, ciphertext, nil)
 
 	return plaintext, err
+}
+
+func (c *CryptoHelper) EncryptRSA(pubKey *rsa.PublicKey, plaintext []byte) ([]byte, error) {
+	if len(plaintext) == 0 {
+		return nil, nil
+	}
+	encrypted, err := rsa.EncryptOAEP(
+		sha256.New(),
+		rand.Reader,
+		pubKey,
+		plaintext,
+		nil,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return encrypted, nil
+}
+
+func (c *CryptoHelper) DecryptRSA(privKey *rsa.PrivateKey, ciphertext []byte) ([]byte, error) {
+	if len(ciphertext) == 0 {
+		return nil, nil
+	}
+	decrypted, err := rsa.DecryptOAEP(
+		sha256.New(),
+		rand.Reader,
+		privKey,
+		ciphertext,
+		nil,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return decrypted, nil
 }

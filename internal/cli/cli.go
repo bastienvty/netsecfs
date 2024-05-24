@@ -9,7 +9,6 @@ import (
 	"github.com/bastienvty/netsecfs/internal/crypto"
 	"github.com/bastienvty/netsecfs/internal/db/meta"
 	"github.com/bastienvty/netsecfs/internal/db/object"
-	"github.com/bastienvty/netsecfs/internal/share"
 	"github.com/hanwen/go-fuse/v2/fuse"
 	"github.com/spf13/cobra"
 )
@@ -65,6 +64,9 @@ func startConsole(m meta.Meta, blob object.ObjectStorage, mp string) {
 		}
 		line := scanner.Text()
 		fields := strings.Fields(line)
+		if len(fields) == 0 {
+			continue
+		}
 		switch fields[0] {
 		case "exit":
 			if isMounted {
@@ -177,11 +179,16 @@ func startConsole(m meta.Meta, blob object.ObjectStorage, mp string) {
 				fmt.Println("User not logged in.")
 				continue
 			}
-			if len(fields) != 2 {
-				fmt.Println("Usage: share <path>")
+			if len(fields) != 3 {
+				fmt.Println("Usage: share <path> <user>")
 				continue
 			}
-			share.Share(fields[1], user.rootKey)
+			shared := user.shareDir(fields[1], fields[2])
+			if !shared {
+				fmt.Println("Share failed. Please try again.")
+				continue
+			}
+			fmt.Println("Share successfull.")
 		case "unshare":
 			// share.Unshare(mp)
 		}

@@ -57,6 +57,7 @@ const MaxName = 255
 type Ino uint64
 
 const RootInode Ino = 1
+const SharedInode Ino = 2
 const SkipDirMtime time.Duration = 100 * time.Millisecond
 
 func (i Ino) String() string {
@@ -150,13 +151,14 @@ type Meta interface {
 	Load() (*Format, error)
 	GetNextInode(ctx context.Context, lastIno *Ino) error
 	GetUserId(username string, uid *uint32) error
+	GetUserPublicKey(username string, pubKey *[]byte) error
 
 	// StatFS returns summary statistics of a volume (no need here as it is handled in node, just for reference)
 	// StatFS(ctx context.Context, ino Ino, totalspace, availspace, iused, iavail *uint64) syscall.Errno
 	// Access checks the access permission on given inode.
 	// doAccess(ctx context.Context, inode Ino, modemask uint8, attr *Attr) syscall.Errno
 	// Lookup returns the inode and attributes for the given entry in a directory.
-	Lookup(ctx context.Context, parent Ino, inode Ino, attr *Attr) syscall.Errno
+	Lookup(ctx context.Context, userId uint32, parent, inode Ino, attr *Attr) syscall.Errno
 	// GetAttr returns the attributes for given node.
 	GetAttr(ctx context.Context, inode Ino, attr *Attr) syscall.Errno
 	// SetAttr updates the attributes for given node.
@@ -184,12 +186,15 @@ type Meta interface {
 	// Write put a slice of data on top of the given chunk.
 	Write(ctx context.Context, inode uint64, data []byte, off int64) syscall.Errno
 	GetKey(ctx context.Context, inode Ino, key *[]byte) syscall.Errno
+	GetSharedKey(ctx context.Context, userdId uint32, inode Ino, key *[]byte) syscall.Errno
 
 	CheckUser(username string) syscall.Errno
 	CreateUser(username string, password, salt, rootKey, privKey, pubKey []byte) syscall.Errno
 	VerifyUser(username string, password []byte, rootKey, privKey *[]byte) syscall.Errno
 	GetSalt(username string, salt *[]byte) syscall.Errno
 	ChangePassword(username string, password, salt, rootKey, privKey []byte) syscall.Errno
+	ShareDir(user uint32, inode Ino, name, key []byte) syscall.Errno
+	GetPathKey(inode Ino, keys *[][]byte) syscall.Errno
 }
 
 func RegisterMeta(addr string) Meta {

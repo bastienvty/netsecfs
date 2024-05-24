@@ -3,6 +3,7 @@ package fs
 import (
 	"context"
 	"crypto/rand"
+	"crypto/rsa"
 	"io"
 	"os"
 	"syscall"
@@ -46,25 +47,25 @@ type Node struct {
 	obj    object.ObjectStorage
 	enc    crypto.CryptoHelper
 
-	masterKey []byte
-	key       []byte
-	userId    uint32
+	privKey *rsa.PrivateKey
+	key     []byte
+	userId  uint32
 }
 
-func NewRootNode(meta meta.Meta, obj object.ObjectStorage, masterKey, key []byte, username string) *Node {
+func NewRootNode(meta meta.Meta, obj object.ObjectStorage, privateKey *rsa.PrivateKey, key []byte, username string) *Node {
 	var userId uint32
 	ok := meta.GetUserId(username, &userId)
 	if ok != nil {
 		return nil
 	}
 	return &Node{
-		inoMap:    make(map[string]Ino),
-		meta:      meta,
-		obj:       obj,
-		enc:       crypto.CryptoHelper{},
-		masterKey: masterKey,
-		key:       key,
-		userId:    userId,
+		inoMap:  make(map[string]Ino),
+		meta:    meta,
+		obj:     obj,
+		enc:     crypto.CryptoHelper{},
+		privKey: privateKey,
+		key:     key,
+		userId:  userId,
 	}
 }
 
@@ -94,34 +95,43 @@ func (n *Node) Lookup(ctx context.Context, name string, out *fuse.EntryOut) (*fs
 	if len(name) > maxName {
 		return nil, syscall.ENAMETOOLONG
 	}
-	var err syscall.Errno
+	var errno syscall.Errno
+	var err error
 	var attr = &meta.Attr{}
 	parent := Ino(n.StableAttr().Ino)
-	var key []byte
+	var key, keyDec []byte
 	ino, ok := n.inoMap[name]
 	if !ok {
 		return nil, syscall.ENOENT
 	}
-	err = n.meta.GetKey(ctx, ino, &key)
-	if err != 0 {
-		return nil, err
+	if parent == meta.SharedInode {
+		errno = n.meta.GetSharedKey(ctx, n.userId, ino, &key)
+	} else {
+		errno = n.meta.GetKey(ctx, ino, &key)
 	}
-	keyDec, e := n.enc.Decrypt(n.key, key)
-	if e != nil {
+	if errno != 0 {
+		return nil, errno
+	}
+	if parent == meta.SharedInode {
+		keyDec, err = n.enc.DecryptRSA(n.privKey, key)
+	} else {
+		keyDec, err = n.enc.Decrypt(n.key, key)
+	}
+	if err != nil {
 		return nil, syscall.EINVAL
 	}
-	err = n.meta.Lookup(ctx, parent, ino, attr)
-	if err != 0 {
-		return nil, err
+	errno = n.meta.Lookup(ctx, n.userId, parent, ino, attr)
+	if errno != 0 {
+		return nil, errno
 	}
 	ops := &Node{
-		inoMap:    n.inoMap,
-		meta:      n.meta,
-		obj:       n.obj,
-		enc:       n.enc,
-		masterKey: n.masterKey,
-		key:       keyDec,
-		userId:    n.userId,
+		inoMap:  n.inoMap,
+		meta:    n.meta,
+		obj:     n.obj,
+		enc:     n.enc,
+		privKey: n.privKey,
+		key:     keyDec,
+		userId:  n.userId,
 	}
 	entry := &meta.Entry{Inode: ino, Attr: attr}
 	attrToStat(entry.Inode, entry.Attr, &out.Attr)
@@ -246,13 +256,13 @@ func (n *Node) Create(ctx context.Context, name string, flags uint32, mode uint3
 	entry := &meta.Entry{Inode: ino, Attr: attr}
 	attrToStat(entry.Inode, entry.Attr, &out.Attr)
 	ops := &Node{
-		inoMap:    n.inoMap,
-		meta:      n.meta,
-		obj:       n.obj,
-		enc:       n.enc,
-		masterKey: n.masterKey,
-		key:       key,
-		userId:    n.userId,
+		inoMap:  n.inoMap,
+		meta:    n.meta,
+		obj:     n.obj,
+		enc:     n.enc,
+		privKey: n.privKey,
+		key:     key,
+		userId:  n.userId,
 	}
 	st := fs.StableAttr{
 		Mode: attr.SMode(),
@@ -299,11 +309,19 @@ func (n *Node) Readdir(ctx context.Context) (fs.DirStream, syscall.Errno) {
 		Name:  []byte(".."),
 		Attr:  &meta.Attr{Typ: meta.TypeDirectory},
 	})
-	st := n.meta.Readdir(ctx, inode, n.userId, &entries)
+	errno := n.meta.Readdir(ctx, inode, n.userId, &entries)
+	if errno != 0 {
+		return nil, errno
+	}
 	var de fuse.DirEntry
-	var name []byte
+	var name, key []byte
+	var ok error
 	for _, e := range entries {
-		key, ok := n.enc.Decrypt(n.key, e.Key)
+		if inode == meta.SharedInode {
+			key, ok = n.enc.DecryptRSA(n.privKey, e.Key)
+		} else {
+			key, ok = n.enc.Decrypt(n.key, e.Key)
+		}
 		if ok != nil {
 			return nil, syscall.EINVAL
 		}
@@ -321,7 +339,7 @@ func (n *Node) Readdir(ctx context.Context) (fs.DirStream, syscall.Errno) {
 		de.Mode = e.Attr.SMode()
 		result = append(result, de)
 	}
-	return fs.NewListDirStream(result), st
+	return fs.NewListDirStream(result), errno
 }
 
 func (n *Node) Mkdir(ctx context.Context, name string, mode uint32, out *fuse.EntryOut) (node *fs.Inode, errno syscall.Errno) {
@@ -354,13 +372,13 @@ func (n *Node) Mkdir(ctx context.Context, name string, mode uint32, out *fuse.En
 	entry := &meta.Entry{Inode: ino, Attr: attr}
 	attrToStat(entry.Inode, entry.Attr, &out.Attr)
 	ops := &Node{
-		inoMap:    make(map[string]Ino),
-		meta:      n.meta,
-		obj:       n.obj,
-		enc:       n.enc,
-		masterKey: n.masterKey,
-		key:       key,
-		userId:    n.userId,
+		inoMap:  make(map[string]Ino),
+		meta:    n.meta,
+		obj:     n.obj,
+		enc:     n.enc,
+		privKey: n.privKey,
+		key:     key,
+		userId:  n.userId,
 	}
 	st := fs.StableAttr{
 		Mode: attr.SMode(),

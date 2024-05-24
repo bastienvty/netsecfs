@@ -5,6 +5,9 @@ import (
 	"crypto/rsa"
 	"crypto/sha256"
 	"crypto/x509"
+	"fmt"
+	"os"
+	"syscall"
 
 	"github.com/bastienvty/netsecfs/internal/crypto"
 	"github.com/bastienvty/netsecfs/internal/db/meta"
@@ -190,4 +193,75 @@ func (u *User) changePassword(newPassword string) bool {
 	u.password = newPassword
 	u.masterKey = newMasterKey
 	return true
+}
+
+func (u *User) shareDir(dir, username string) bool {
+	info, err := os.Stat(dir)
+	if err != nil {
+		fmt.Println("Error getting file info:", err)
+		return false
+	}
+
+	stat, ok := info.Sys().(*syscall.Stat_t)
+	if !ok {
+		fmt.Println("Not a syscall.Stat_t")
+		return false
+	}
+
+	if stat == nil {
+		fmt.Println("Stat is nil")
+		return false
+	}
+
+	// directory ?
+	if !info.IsDir() {
+		return false
+	}
+	inode := stat.Ino
+
+	var userId uint32
+	err = u.m.GetUserId(username, &userId)
+	if err != nil {
+		return false
+	}
+
+	var keys [][]byte
+	errno := u.m.GetPathKey(meta.Ino(inode), &keys)
+	if errno != 0 {
+		return false
+	}
+
+	// start at the root of the path
+	key := u.rootKey
+	for i := len(keys) - 1; i >= 0; i-- {
+		key, err = u.enc.Decrypt(key, keys[i])
+		if err != nil {
+			return false
+		}
+	}
+
+	name := []byte(info.Name())
+	nameCipher, err := u.enc.Encrypt(key, name)
+	if err != nil {
+		return false
+	}
+	fmt.Println("Sharing", string(name), "with", username, "key:", key)
+
+	var pubKeyBytes []byte
+	err = u.m.GetUserPublicKey(username, &pubKeyBytes)
+	if err != nil {
+		return false
+	}
+
+	pubKey, err := x509.ParsePKCS1PublicKey(pubKeyBytes)
+	if err != nil {
+		return false
+	}
+	key, err = u.enc.EncryptRSA(pubKey, key)
+	if err != nil {
+		return false
+	}
+
+	errno = u.m.ShareDir(userId, meta.Ino(inode), nameCipher, key)
+	return errno == 0
 }
