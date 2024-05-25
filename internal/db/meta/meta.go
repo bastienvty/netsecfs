@@ -77,6 +77,7 @@ type shared struct {
 	Name  []byte `xorm:"unique(edge) varbinary(255) notnull"`
 	User  uint32 `xorm:"notnull"`
 	Key   []byte `xorm:"notnull"`
+	Sign  []byte `xorm:"notnull"`
 }
 
 type dbMeta struct {
@@ -747,9 +748,6 @@ func (m *dbMeta) Rmdir(ctx context.Context, parent, inode Ino) syscall.Errno {
 		}
 		var pattr Attr
 		m.parseAttr(&pn, &pattr)
-		/*if st := m.Access(ctx, parent, MODE_MASK_W|MODE_MASK_X, &pattr); st != 0 {
-			return st
-		}*/
 		var e = edge{Parent: parent, Inode: inode}
 		ok, err = s.Get(&e)
 		if err != nil {
@@ -792,6 +790,10 @@ func (m *dbMeta) Rmdir(ctx context.Context, parent, inode Ino) syscall.Errno {
 		}
 
 		if _, err := s.Delete(&node{Inode: e.Inode}); err != nil {
+			return err
+		}
+
+		if _, err := s.Delete(&shared{Inode: e.Inode}); err != nil {
 			return err
 		}
 
@@ -899,8 +901,8 @@ func (m *dbMeta) Write(ctx context.Context, inode uint64, data []byte, off int64
 	}, ino))
 }
 
-func (m *dbMeta) CheckUser(username string) syscall.Errno {
-	return errno(m.roTxn(func(s *xorm.Session) error {
+func (m *dbMeta) CheckUser(username string) error {
+	return m.roTxn(func(s *xorm.Session) error {
 		user := user{Username: username}
 		exist, err := s.Get(&user)
 		if err != nil {
@@ -910,11 +912,11 @@ func (m *dbMeta) CheckUser(username string) syscall.Errno {
 			return syscall.EEXIST
 		}
 		return nil
-	}))
+	})
 }
 
-func (m *dbMeta) CreateUser(username string, password, salt, rootKey, privKey, pubKey []byte) syscall.Errno {
-	return errno(m.txn(func(s *xorm.Session) error {
+func (m *dbMeta) CreateUser(username string, password, salt, rootKey, privKey, pubKey []byte) error {
+	return m.txn(func(s *xorm.Session) error {
 		exist, err := s.Get(&user{Username: username})
 		if err != nil {
 			return err
@@ -938,11 +940,11 @@ func (m *dbMeta) CreateUser(username string, password, salt, rootKey, privKey, p
 		}
 		_, err = s.Insert(user)
 		return err
-	}))
+	})
 }
 
-func (m *dbMeta) VerifyUser(username string, password []byte, rootKey, privKey *[]byte) syscall.Errno {
-	return errno(m.roTxn(func(s *xorm.Session) error {
+func (m *dbMeta) VerifyUser(username string, password []byte, rootKey, privKey *[]byte) error {
+	return m.roTxn(func(s *xorm.Session) error {
 		user := user{Username: username}
 		exist, err := s.Get(&user)
 		if err != nil {
@@ -963,11 +965,11 @@ func (m *dbMeta) VerifyUser(username string, password []byte, rootKey, privKey *
 		*rootKey = user.RootKey
 		*privKey = user.PrKey
 		return nil
-	}))
+	})
 }
 
-func (m *dbMeta) GetSalt(username string, salt *[]byte) syscall.Errno {
-	return errno(m.roTxn(func(s *xorm.Session) error {
+func (m *dbMeta) GetSalt(username string, salt *[]byte) error {
+	return m.roTxn(func(s *xorm.Session) error {
 		user := user{Username: username}
 		exist, err := s.Get(&user)
 		if err != nil {
@@ -978,11 +980,11 @@ func (m *dbMeta) GetSalt(username string, salt *[]byte) syscall.Errno {
 		}
 		*salt = user.Salt
 		return nil
-	}))
+	})
 }
 
-func (m *dbMeta) ChangePassword(username string, password, salt, rootKey, privKey []byte) syscall.Errno {
-	return errno(m.txn(func(s *xorm.Session) error {
+func (m *dbMeta) ChangePassword(username string, password, salt, rootKey, privKey []byte) error {
+	return m.txn(func(s *xorm.Session) error {
 		userToChange := user{Username: username}
 		exist, err := s.Get(&userToChange)
 		if err != nil {
@@ -1003,11 +1005,11 @@ func (m *dbMeta) ChangePassword(username string, password, salt, rootKey, privKe
 		userToChange.PrKey = privKey
 		_, err = s.Cols("password", "salt", "root_key", "pr_key").Update(&userToChange, &user{Username: username})
 		return err
-	}))
+	})
 }
 
-func (m *dbMeta) ShareDir(userId uint32, inode Ino, name, key []byte) syscall.Errno {
-	return errno(m.txn(func(s *xorm.Session) error {
+func (m *dbMeta) ShareDir(userId uint32, inode Ino, name, key, sign []byte) error {
+	return m.txn(func(s *xorm.Session) error {
 		user := user{Id: userId}
 		exist, err := s.Get(&user)
 		if err != nil {
@@ -1016,14 +1018,37 @@ func (m *dbMeta) ShareDir(userId uint32, inode Ino, name, key []byte) syscall.Er
 		if !exist {
 			return syscall.ENOENT
 		}
-		shared := shared{Inode: inode, Name: name, User: userId, Key: key}
+		shared := shared{Inode: inode, Name: name, User: userId, Key: key, Sign: sign}
 		_, err = s.Insert(shared)
 		return err
-	}))
+	})
 }
 
-func (m *dbMeta) GetPathKey(inode Ino, keys *[][]byte) syscall.Errno {
-	return errno(m.txn(func(s *xorm.Session) error {
+func (m *dbMeta) UnshareDir(userId uint32, inode Ino) error {
+	return m.txn(func(s *xorm.Session) error {
+		shared := shared{Inode: inode, User: userId}
+		_, err := s.Delete(&shared)
+		return err
+	})
+}
+
+func (m *dbMeta) VerifyShare(userId uint32, inode Ino, sign *[]byte) error {
+	return m.roTxn(func(s *xorm.Session) error {
+		shared := shared{Inode: inode, User: userId}
+		exist, err := s.Get(&shared)
+		if err != nil {
+			return err
+		}
+		if !exist {
+			return syscall.ENOENT
+		}
+		*sign = shared.Sign
+		return nil
+	})
+}
+
+func (m *dbMeta) GetPathKey(inode Ino, keys *[][]byte) error {
+	return m.txn(func(s *xorm.Session) error {
 		e := edge{Inode: inode}
 		exist, err := s.Get(&e)
 		if err != nil {
@@ -1047,7 +1072,7 @@ func (m *dbMeta) GetPathKey(inode Ino, keys *[][]byte) syscall.Errno {
 			parent = e.Parent
 		}
 		return nil
-	}))
+	})
 }
 
 func newSQLMeta(driver, addr string) (Meta, error) {

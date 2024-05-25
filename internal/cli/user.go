@@ -51,16 +51,13 @@ type User struct {
 	rootKey    []byte
 }
 
-func (u *User) checkUser() bool {
-	err := u.m.CheckUser(u.username)
-	return err != 0
-}
-
 func (u *User) createUser() bool {
 	if u.username == "" || u.password == "" {
+		fmt.Println("Username or password is empty.")
 		return false
 	}
-	if u.checkUser() {
+	if u.m.CheckUser(u.username) != nil {
+		fmt.Printf("User %s already exists.\n", u.username)
 		return false
 	}
 	p := defaultParams()
@@ -101,8 +98,8 @@ func (u *User) createUser() bool {
 		return false
 	}
 
-	errno := u.m.CreateUser(u.username, hashMasterKey, salt, rootCipher, privCipher, pubKeyBytes)
-	if errno != 0 {
+	err = u.m.CreateUser(u.username, hashMasterKey, salt, rootCipher, privCipher, pubKeyBytes)
+	if err != nil {
 		return false
 	}
 
@@ -114,25 +111,26 @@ func (u *User) createUser() bool {
 
 func (u *User) verifyUser() bool {
 	if u.username == "" || u.password == "" {
+		fmt.Println("Username or password is empty.")
 		return false
 	}
 	p := defaultParams()
 	var salt []byte
-	errno := u.m.GetSalt(u.username, &salt)
-	if errno != 0 {
+	err := u.m.GetSalt(u.username, &salt)
+	if err != nil {
 		return false
 	}
 	masterKey := argon2.IDKey([]byte(u.password), salt, p.iterations, p.memory, p.parallelism, p.keyLength)
 
 	hashMaster := sha256.New()
-	_, err := hashMaster.Write(masterKey)
+	_, err = hashMaster.Write(masterKey)
 	if err != nil {
 		return false
 	}
 	hashMasterKey := hashMaster.Sum(nil)
 	var rootCipher, privCipher []byte
-	errno = u.m.VerifyUser(u.username, hashMasterKey, &rootCipher, &privCipher)
-	if errno != 0 {
+	err = u.m.VerifyUser(u.username, hashMasterKey, &rootCipher, &privCipher)
+	if err != nil {
 		return false
 	}
 
@@ -158,6 +156,7 @@ func (u *User) verifyUser() bool {
 
 func (u *User) changePassword(newPassword string) bool {
 	if u.username == "" || u.password == "" || newPassword == "" {
+		fmt.Println("Username or password is empty.")
 		return false
 	}
 	p := defaultParams()
@@ -185,8 +184,8 @@ func (u *User) changePassword(newPassword string) bool {
 		return false
 	}
 
-	errno := u.m.ChangePassword(u.username, hashMasterKey, salt, rootCipher, privCipher)
-	if errno != 0 {
+	err = u.m.ChangePassword(u.username, hashMasterKey, salt, rootCipher, privCipher)
+	if err != nil {
 		return false
 	}
 
@@ -204,17 +203,15 @@ func (u *User) shareDir(dir, username string) bool {
 
 	stat, ok := info.Sys().(*syscall.Stat_t)
 	if !ok {
-		fmt.Println("Not a syscall.Stat_t")
 		return false
 	}
 
 	if stat == nil {
-		fmt.Println("Stat is nil")
 		return false
 	}
 
-	// directory ?
 	if !info.IsDir() {
+		fmt.Printf("%s is not a directory.\n", dir)
 		return false
 	}
 	inode := stat.Ino
@@ -222,12 +219,13 @@ func (u *User) shareDir(dir, username string) bool {
 	var userId uint32
 	err = u.m.GetUserId(username, &userId)
 	if err != nil {
+		fmt.Printf("No such user found: %s\n", username)
 		return false
 	}
 
 	var keys [][]byte
-	errno := u.m.GetPathKey(meta.Ino(inode), &keys)
-	if errno != 0 {
+	err = u.m.GetPathKey(meta.Ino(inode), &keys)
+	if err != nil {
 		return false
 	}
 
@@ -245,7 +243,11 @@ func (u *User) shareDir(dir, username string) bool {
 	if err != nil {
 		return false
 	}
-	fmt.Println("Sharing", string(name), "with", username, "key:", key)
+
+	nameSign, err := u.enc.Sign(u.privateKey, name)
+	if err != nil {
+		return false
+	}
 
 	var pubKeyBytes []byte
 	err = u.m.GetUserPublicKey(username, &pubKeyBytes)
@@ -262,6 +264,53 @@ func (u *User) shareDir(dir, username string) bool {
 		return false
 	}
 
-	errno = u.m.ShareDir(userId, meta.Ino(inode), nameCipher, key)
-	return errno == 0
+	err = u.m.ShareDir(userId, meta.Ino(inode), nameCipher, key, nameSign)
+	return err == nil
+}
+
+func (u *User) unshareDir(dir, username string) bool {
+	info, err := os.Stat(dir)
+	if err != nil {
+		fmt.Println("Error getting file info:", err)
+		return false
+	}
+
+	stat, ok := info.Sys().(*syscall.Stat_t)
+	if !ok {
+		return false
+	}
+
+	if stat == nil {
+		return false
+	}
+
+	if !info.IsDir() {
+		fmt.Printf("%s is not a directory.\n", dir)
+		return false
+	}
+	inode := stat.Ino
+
+	var userId uint32
+	err = u.m.GetUserId(username, &userId)
+	if err != nil {
+		fmt.Printf("No such user found: %s\n", username)
+		return false
+	}
+
+	var sign []byte
+	err = u.m.VerifyShare(userId, meta.Ino(inode), &sign)
+	if err != nil {
+		fmt.Println("No corresponding share found.")
+		return false
+	}
+
+	pubKey := &u.privateKey.PublicKey
+	err = u.enc.VerifySign(pubKey, []byte(info.Name()), sign)
+	if err != nil {
+		fmt.Println("You are not the owner of this directory. You cannot unshare it.")
+		return false
+	}
+
+	err = u.m.UnshareDir(userId, meta.Ino(inode))
+	return err == nil
 }

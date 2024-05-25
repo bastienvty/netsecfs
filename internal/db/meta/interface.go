@@ -188,13 +188,15 @@ type Meta interface {
 	GetKey(ctx context.Context, inode Ino, key *[]byte) syscall.Errno
 	GetSharedKey(ctx context.Context, userdId uint32, inode Ino, key *[]byte) syscall.Errno
 
-	CheckUser(username string) syscall.Errno
-	CreateUser(username string, password, salt, rootKey, privKey, pubKey []byte) syscall.Errno
-	VerifyUser(username string, password []byte, rootKey, privKey *[]byte) syscall.Errno
-	GetSalt(username string, salt *[]byte) syscall.Errno
-	ChangePassword(username string, password, salt, rootKey, privKey []byte) syscall.Errno
-	ShareDir(user uint32, inode Ino, name, key []byte) syscall.Errno
-	GetPathKey(inode Ino, keys *[][]byte) syscall.Errno
+	CheckUser(username string) error
+	CreateUser(username string, password, salt, rootKey, privKey, pubKey []byte) error
+	VerifyUser(username string, password []byte, rootKey, privKey *[]byte) error
+	GetSalt(username string, salt *[]byte) error
+	ChangePassword(username string, password, salt, rootKey, privKey []byte) error
+	ShareDir(user uint32, inode Ino, name, key, sign []byte) error
+	UnshareDir(user uint32, inode Ino) error
+	VerifyShare(user uint32, inode Ino, sign *[]byte) error
+	GetPathKey(inode Ino, keys *[][]byte) error
 }
 
 func RegisterMeta(addr string) Meta {

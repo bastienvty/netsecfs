@@ -180,17 +180,48 @@ func startConsole(m meta.Meta, blob object.ObjectStorage, mp string) {
 				continue
 			}
 			if len(fields) != 3 {
-				fmt.Println("Usage: share <path> <user>")
+				fmt.Println("Usage: share <folder_path> <user>")
 				continue
 			}
-			shared := user.shareDir(fields[1], fields[2])
+			dir := mp + "/" + fields[1]
+			shared := user.shareDir(dir, fields[2])
 			if !shared {
 				fmt.Println("Share failed. Please try again.")
 				continue
 			}
 			fmt.Println("Share successfull.")
 		case "unshare":
-			// share.Unshare(mp)
+			if !isMounted {
+				fmt.Println("Mount before unsharing.")
+				continue
+			}
+			if !isLogged {
+				fmt.Println("User not logged in.")
+				continue
+			}
+			if len(fields) != 3 {
+				fmt.Println("Usage: unshare <folder_path> <user>")
+				continue
+			}
+			dir := mp + "/" + fields[1]
+			unshared := user.unshareDir(dir, fields[2])
+			if !unshared {
+				fmt.Println("Unshare failed. Please try again.")
+				continue
+			}
+			fmt.Println("Unshare successfull.")
+		case "logout":
+			if !isLogged {
+				fmt.Println("User not logged in.")
+				continue
+			}
+			if isMounted {
+				fmt.Println("Unmount before logging out.")
+				continue
+			}
+			fmt.Printf("User %s logged out.\n", user.username)
+			isLogged = false
+			user = User{}
 		}
 	}
 }
