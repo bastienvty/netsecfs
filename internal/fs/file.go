@@ -15,8 +15,6 @@ type File struct {
 
 var _ fs.FileHandle = (*File)(nil)
 
-// var _ = (fs.FileGetattrer)((*File)(nil))
-// var _ = (fs.FileSetattrer)((*File)(nil))
 var _ = (fs.FileReader)((*File)(nil))
 
 var _ = (fs.FileWriter)((*File)(nil))
@@ -24,24 +22,6 @@ var _ = (fs.FileWriter)((*File)(nil))
 var _ = (fs.FileFlusher)((*File)(nil))
 var _ = (fs.FileReleaser)((*File)(nil))
 var _ = (fs.FileFsyncer)((*File)(nil))
-
-/*func newFile(meta meta.Meta, name string) (fh *File, errno syscall.Errno) {
-	st := &syscall.Stat_t{}
-	if err := syscall.Fstat(int(ino), st); err != nil {
-		errno = fs.ToErrno(err)
-		return
-	}
-
-	osFile := os.NewFile(uintptr(ino), name)
-
-	fh = &File{}
-
-	return fh, 0
-}*/
-
-/*func (f *NSFile) Getattr(ctx context.Context, out *fuse.AttrOut) syscall.Errno {
-	return 0
-}*/
 
 func (f *File) Read(ctx context.Context, dest []byte, off int64) (fuse.ReadResult, syscall.Errno) {
 	ino := f.n.StableAttr().Ino

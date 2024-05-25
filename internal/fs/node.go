@@ -17,10 +17,8 @@ import (
 )
 
 const (
-	rootID  = 1
-	maxName = meta.MaxName
-	/*maxSymlink  = meta.MaxSymlink
-	maxFileSize = meta.ChunkSize << 31*/
+	rootID        = 1
+	maxName       = meta.MaxName
 	fileBlockSize = 1 << 12          // 4k
 	maxSize       = 1125899906842624 // 1TB
 )
@@ -65,25 +63,18 @@ func NewRootNode(meta meta.Meta, obj object.ObjectStorage, privateKey *rsa.Priva
 
 var _ = (fs.InodeEmbedder)((*Node)(nil))
 var _ = (fs.NodeLookuper)((*Node)(nil))
+var _ = (fs.NodeSetattrer)((*Node)(nil))
 var _ = (fs.NodeGetattrer)((*Node)(nil))
 var _ = (fs.NodeStatfser)((*Node)(nil))
 
-// var _ = (fs.NodeSetattrer)((*Node)(nil))
-
 var _ = (fs.NodeOpener)((*Node)(nil))
-
 var _ = (fs.NodeCreater)((*Node)(nil))
 
-// var _ = (fs.NodeRenamer)((*Node)(nil))
-
-// var _ = (fs.NodeAccesser)((*Node)(nil))
-// var _ = (fs.NodeOpendirer)((*Node)(nil))
 var _ = (fs.NodeReaddirer)((*Node)(nil))
 var _ = (fs.NodeMkdirer)((*Node)(nil))
 var _ = (fs.NodeRmdirer)((*Node)(nil))
 
-var _ = (fs.NodeUnlinker)((*Node)(nil)) // vim
-// var _ = (fs.NodeFsyncer)((*Node)(nil))  // vim
+var _ = (fs.NodeUnlinker)((*Node)(nil))
 
 func (n *Node) Lookup(ctx context.Context, name string, out *fuse.EntryOut) (*fs.Inode, syscall.Errno) {
 	if len(name) > maxName {
@@ -205,10 +196,6 @@ func (n *Node) Setattr(ctx context.Context, f fs.FileHandle, in *fuse.SetAttrIn,
 	return err
 }
 
-/*func (n *Node) Access(ctx context.Context, mask uint32) syscall.Errno {
-	return 0
-}*/
-
 func (n *Node) Open(ctx context.Context, flags uint32) (fh fs.FileHandle, fuseFlags uint32, errno syscall.Errno) {
 	fh = &File{
 		n: n,
@@ -271,14 +258,6 @@ func (n *Node) Create(ctx context.Context, name string, flags uint32, mode uint3
 
 	return ops.EmbeddedInode(), fh, 0, 0
 }
-
-/*func (n *Node) Rename(ctx context.Context, name string, newParent fs.InodeEmbedder, newName string, flags uint32) syscall.Errno {
-	return 0
-}
-
-func (n *Node) Opendir(ctx context.Context) syscall.Errno {
-	return 0
-}*/
 
 func (n *Node) Readdir(ctx context.Context) (fs.DirStream, syscall.Errno) {
 	var attr meta.Attr
@@ -424,7 +403,3 @@ func (n *Node) Unlink(ctx context.Context, name string) syscall.Errno {
 	errno := n.obj.Delete(child.StableAttr().Ino, "")
 	return fs.ToErrno(errno)
 }
-
-/*func (n *Node) Fsync(ctx context.Context, f fs.FileHandle, flags uint32) syscall.Errno {
-	return 0
-}*/

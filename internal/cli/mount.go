@@ -18,8 +18,6 @@ func mount(user User, blob object.ObjectStorage, mp string) (*fuse.Server, error
 	var fuseOpts *gofs.Options
 	sec := time.Second
 	fuseOpts = &gofs.Options{
-		// These options are to be compatible with libfuse defaults,
-		// making benchmarking easier.
 		NegativeTimeout: &sec,
 		AttrTimeout:     &sec,
 		EntryTimeout:    &sec,
@@ -46,7 +44,6 @@ func mount(user User, blob object.ObjectStorage, mp string) (*fuse.Server, error
 
 	fmt.Println("Unmount to stop the server.")
 	// server.Wait()
-	// fmt.Println("Server exited.")
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 	go func() {

@@ -411,7 +411,7 @@ func (m *dbMeta) SetAttr(ctx context.Context, inode Ino, in *fuse.SetAttrIn, att
 		now := time.Now()
 
 		set := uint16(in.Valid)
-		dirtyAttr, st := m.mergeAttr(ctx, inode, set, &curAttr, attr, now)
+		dirtyAttr, st := m.mergeAttr(ctx, set, &curAttr, attr, now)
 		if st != 0 {
 			return st
 		}
@@ -433,7 +433,7 @@ func (m *dbMeta) SetAttr(ctx context.Context, inode Ino, in *fuse.SetAttrIn, att
 	}, inode))
 }
 
-func (m *dbMeta) mergeAttr(ctx context.Context, inode Ino, set uint16, cur, attr *Attr, now time.Time) (*Attr, syscall.Errno) {
+func (m *dbMeta) mergeAttr(ctx context.Context, set uint16, cur, attr *Attr, now time.Time) (*Attr, syscall.Errno) {
 	// do not allow to change uid, gid or mode. Only meta attributes of time can be changed.
 	dirtyAttr := *cur
 	var uid uint32
@@ -442,9 +442,6 @@ func (m *dbMeta) mergeAttr(ctx context.Context, inode Ino, set uint16, cur, attr
 	}
 	var changed bool
 	if set&SetAttrAtimeNow != 0 || (set&SetAttrAtime) != 0 && attr.Atime < 0 {
-		/*if st := m.Access(ctx, inode, MODE_MASK_W, cur); ctx.Uid() != cur.Uid && st != 0 {
-			return nil, syscall.EACCES
-		}*/
 		dirtyAttr.Atime = now.Unix()
 		dirtyAttr.Atimensec = uint32(now.Nanosecond())
 		changed = true
@@ -452,17 +449,11 @@ func (m *dbMeta) mergeAttr(ctx context.Context, inode Ino, set uint16, cur, attr
 		if uid == 0 {
 			return nil, syscall.EPERM
 		}
-		/*if st := m.Access(ctx, inode, MODE_MASK_W, cur); ctx.Uid() != cur.Uid && st != 0 {
-			return nil, syscall.EACCES
-		}*/
 		dirtyAttr.Atime = attr.Atime
 		dirtyAttr.Atimensec = attr.Atimensec
 		changed = true
 	}
 	if set&SetAttrMtimeNow != 0 || (set&SetAttrMtime) != 0 && attr.Mtime < 0 {
-		/*if st := m.Access(ctx, inode, MODE_MASK_W, cur); ctx.Uid() != cur.Uid && st != 0 {
-			return nil, syscall.EACCES
-		}*/
 		dirtyAttr.Mtime = now.Unix()
 		dirtyAttr.Mtimensec = uint32(now.Nanosecond())
 		changed = true
@@ -470,9 +461,6 @@ func (m *dbMeta) mergeAttr(ctx context.Context, inode Ino, set uint16, cur, attr
 		if uid == 0 {
 			return nil, syscall.EPERM
 		}
-		/*if st := m.Access(ctx, inode, MODE_MASK_W, cur); ctx.Uid() != cur.Uid && st != 0 {
-			return nil, syscall.EACCES
-		}*/
 		dirtyAttr.Mtime = attr.Mtime
 		dirtyAttr.Mtimensec = attr.Mtimensec
 		changed = true
@@ -697,14 +685,6 @@ func (m *dbMeta) joinSharedNodes(userId uint32, nns *[]namedNode) syscall.Errno 
 }
 
 func (m *dbMeta) Readdir(ctx context.Context, inode Ino, userId uint32, entries *[]*Entry) syscall.Errno {
-	/*s = s.Table(&edge{})
-	if plus != 0 {
-		s = s.Join("INNER", &node{}, "nsfs_edge.inode=nsfs_node.inode")
-	}
-	var nodes []namedNode
-	if err := s.Find(&nodes, &edge{Parent: inode}); err != nil {
-		return err
-	}*/
 	// The join does not seem to work properly so doing some "brute force"
 	nodes := make([]namedNode, 0)
 	var err syscall.Errno
@@ -772,13 +752,6 @@ func (m *dbMeta) Rmdir(ctx context.Context, parent, inode Ino) syscall.Errno {
 			return syscall.ENOTEMPTY
 		}
 		now := time.Now().UnixNano()
-		if ok {
-			/*if ctx.Uid() != 0 && pn.Mode&01000 != 0 && ctx.Uid() != pn.Uid && ctx.Uid() != n.Uid {
-				return syscall.EACCES
-			}*/
-		} else {
-			logger.Warnf("no attribute for inode %d (%d, %s)", inode, parent, e.Inode)
-		}
 		pn.Nlink--
 		pn.Mtime = now / 1e3
 		pn.Ctime = now / 1e3
@@ -816,11 +789,6 @@ func (m *dbMeta) Unlink(ctx context.Context, parent, inode Ino) syscall.Errno {
 		if pn.Type != TypeDirectory {
 			return syscall.ENOTDIR
 		}
-		/*var pattr Attr
-		m.parseAttr(&pn, &pattr)
-		if st := m.Access(ctx, parent, MODE_MASK_W|MODE_MASK_X, &pattr); st != 0 {
-			return st
-		}*/
 		var e = edge{Parent: parent, Inode: inode}
 		ok, err = s.Get(&e)
 		if err != nil {

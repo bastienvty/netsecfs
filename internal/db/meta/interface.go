@@ -1,19 +1,3 @@
-/*
- * JuiceFS, Copyright 2020 Juicedata, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 package meta
 
 import (
@@ -28,15 +12,6 @@ import (
 const (
 	TypeFile      = 1 // type for regular file
 	TypeDirectory = 2 // type for directory
-)
-
-const (
-	RenameNoReplace = 1 << iota
-	RenameExchange
-	RenameWhiteout
-	_renameReserved1
-	_renameReserved2
-	RenameRestore // internal
 )
 
 const (
@@ -71,10 +46,6 @@ func (i Ino) IsValid() bool {
 func (i Ino) IsNormal() bool {
 	return i >= RootInode
 }
-
-// Type of control messages
-const CPROGRESS = 0xFE // 16 bytes: progress increment
-const CDATA = 0xFF     // 4 bytes: data length
 
 // Attr represents attributes of a node.
 type Attr struct {
@@ -153,10 +124,6 @@ type Meta interface {
 	GetUserId(username string, uid *uint32) error
 	GetUserPublicKey(username string, pubKey *[]byte) error
 
-	// StatFS returns summary statistics of a volume (no need here as it is handled in node, just for reference)
-	// StatFS(ctx context.Context, ino Ino, totalspace, availspace, iused, iavail *uint64) syscall.Errno
-	// Access checks the access permission on given inode.
-	// doAccess(ctx context.Context, inode Ino, modemask uint8, attr *Attr) syscall.Errno
 	// Lookup returns the inode and attributes for the given entry in a directory.
 	Lookup(ctx context.Context, userId uint32, parent, inode Ino, attr *Attr) syscall.Errno
 	// GetAttr returns the attributes for given node.
@@ -168,21 +135,9 @@ type Meta interface {
 	Unlink(ctx context.Context, parent, inode Ino) syscall.Errno
 	// Rmdir removes an empty sub-directory.
 	Rmdir(ctx context.Context, parent, inode Ino) syscall.Errno
-	// Rename move an entry from a source directory to another with given name.
-	// The targeted entry will be overwrited if it's a file or empty directory.
-	// For Hadoop, the target should not be overwritten.
-	// doRename(ctx context.Context, parentSrc Ino, nameSrc string, parentDst Ino, nameDst string, flags uint32, inode *Ino, attr *Attr) syscall.Errno
 	// Readdir returns all entries for given directory, which include attributes if plus is true.
 	Readdir(ctx context.Context, inode Ino, userId uint32, entries *[]*Entry) syscall.Errno
-	// Create creates a file in a directory with given name.
-	// Create(ctx context.Context, parent Ino, name string, mode uint16, cumask uint16, flags uint32, inode *Ino, attr *Attr) syscall.Errno
 	Mknod(ctx context.Context, parent Ino, _type uint8, mode, id uint32, inode *Ino, name, key []byte, attr *Attr) syscall.Errno
-	// Open checks permission on a node and track it as open.
-	// doOpen(ctx context.Context, inode Ino, flags uint32, attr *Attr) syscall.Errno
-	// Close a file.
-	// doClose(ctx context.Context, inode Ino) syscall.Errno
-	// Read returns the list of slices on the given chunk.
-	// doRead(ctx context.Context, inode Ino, indx uint32, slices *[]Slice) syscall.Errno
 	// Write put a slice of data on top of the given chunk.
 	Write(ctx context.Context, inode uint64, data []byte, off int64) syscall.Errno
 	GetKey(ctx context.Context, inode Ino, key *[]byte) syscall.Errno

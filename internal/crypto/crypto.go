@@ -62,13 +62,13 @@ func (c *CryptoHelper) Decrypt(key, ciphertext []byte) ([]byte, error) {
 		return nil, err
 	}
 
-	// the nonce is prepended to the cipher text so we need to make sure it is still there and length matches up
+	// the nonce is prepended to the cipher text
 	nonceSize := aesgcm.NonceSize()
 	if len(ciphertext) < nonceSize {
 		return nil, err
 	}
 
-	// now we split the nonce from the ciptertext
+	// split the nonce from the ciptertext
 	nonce, ciphertext := ciphertext[:nonceSize], ciphertext[nonceSize:]
 
 	plaintext, err := aesgcm.Open(nil, nonce, ciphertext, nil)
