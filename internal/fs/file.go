@@ -9,14 +9,6 @@ import (
 	"github.com/hanwen/go-fuse/v2/fuse"
 )
 
-// https://github.com/aegistudio/enigma/blob/master/cmd/enigma/fuse_unix.go
-// https://github.com/pachyderm/pachyderm/blob/master/src/server/pfs/fuse/files.go
-// https://github.com/rclone/rclone/blob/b2f6aac754c5d46c66758db46ecb89aa85c3c113/cmd/mount2/file.go
-// https://github.com/materials-commons/hydra/blob/main/pkg/mcfs/fs/mcfs/base_file_handle.go
-// juicefs
-// nanafs
-// gocryptfs
-
 type File struct {
 	n *Node
 }

@@ -45,7 +45,7 @@ type User struct {
 	password string
 
 	m          meta.Meta
-	enc        crypto.CryptoHelper
+	enc        crypto.Crypto
 	privateKey *rsa.PrivateKey
 	masterKey  []byte
 	rootKey    []byte

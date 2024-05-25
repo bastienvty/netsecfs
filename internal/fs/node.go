@@ -16,12 +16,6 @@ import (
 	"github.com/hanwen/go-fuse/v2/fuse"
 )
 
-// DO NOT USE NODEFS OR PATHFS. THEY ARE DEPRECATED.
-// USE THE FS PACKAGE INSTEAD: https://github.com/hanwen/go-fuse/blob/master/fs/api.go
-
-// https://github.com/materials-commons/hydra/blob/main/pkg/mcfs/fs/mcbridgefs/node.go
-//
-
 const (
 	rootID  = 1
 	maxName = meta.MaxName
@@ -45,7 +39,7 @@ type Node struct {
 	inoMap map[string]Ino
 	meta   meta.Meta
 	obj    object.ObjectStorage
-	enc    crypto.CryptoHelper
+	enc    crypto.Crypto
 
 	privKey *rsa.PrivateKey
 	key     []byte
@@ -62,7 +56,7 @@ func NewRootNode(meta meta.Meta, obj object.ObjectStorage, privateKey *rsa.Priva
 		inoMap:  make(map[string]Ino),
 		meta:    meta,
 		obj:     obj,
-		enc:     crypto.CryptoHelper{},
+		enc:     &crypto.CryptoHelper{},
 		privKey: privateKey,
 		key:     key,
 		userId:  userId,

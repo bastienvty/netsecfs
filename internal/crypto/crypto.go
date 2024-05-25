@@ -12,6 +12,8 @@ import (
 type Crypto interface {
 	Encrypt(key, plaintext []byte) ([]byte, error)
 	Decrypt(key, ciphertext []byte) ([]byte, error)
+	EncryptRSA(pubKey *rsa.PublicKey, plaintext []byte) ([]byte, error)
+	DecryptRSA(privKey *rsa.PrivateKey, ciphertext []byte) ([]byte, error)
 }
 
 type CryptoHelper struct {

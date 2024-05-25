@@ -88,7 +88,7 @@ func startConsole(m meta.Meta, blob object.ObjectStorage, mp string) {
 				username: fields[1],
 				password: fields[2],
 				m:        m,
-				enc:      crypto.CryptoHelper{},
+				enc:      &crypto.CryptoHelper{},
 			}
 			// startTime := time.Now()
 			create := user.createUser()
@@ -113,7 +113,7 @@ func startConsole(m meta.Meta, blob object.ObjectStorage, mp string) {
 				username: fields[1],
 				password: fields[2],
 				m:        m,
-				enc:      crypto.CryptoHelper{},
+				enc:      &crypto.CryptoHelper{},
 			}
 			verify := user.verifyUser()
 			if !verify {
