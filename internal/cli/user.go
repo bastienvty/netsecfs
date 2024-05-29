@@ -244,11 +244,6 @@ func (u *User) shareDir(dir, username string) bool {
 		return false
 	}
 
-	nameSign, err := u.enc.Sign(u.privateKey, name)
-	if err != nil {
-		return false
-	}
-
 	var pubKeyBytes []byte
 	err = u.m.GetUserPublicKey(username, &pubKeyBytes)
 	if err != nil {
@@ -264,7 +259,7 @@ func (u *User) shareDir(dir, username string) bool {
 		return false
 	}
 
-	err = u.m.ShareDir(userId, meta.Ino(inode), nameCipher, key, nameSign)
+	err = u.m.ShareDir(userId, meta.Ino(inode), nameCipher, key)
 	return err == nil
 }
 
@@ -294,20 +289,6 @@ func (u *User) unshareDir(dir, username string) bool {
 	err = u.m.GetUserId(username, &userId)
 	if err != nil {
 		fmt.Printf("No such user found: %s\n", username)
-		return false
-	}
-
-	var sign []byte
-	err = u.m.VerifyShare(userId, meta.Ino(inode), &sign)
-	if err != nil {
-		fmt.Println("No corresponding share found.")
-		return false
-	}
-
-	pubKey := &u.privateKey.PublicKey
-	err = u.enc.VerifySign(pubKey, []byte(info.Name()), sign)
-	if err != nil {
-		fmt.Println("You are not the owner of this directory. You cannot unshare it.")
 		return false
 	}
 

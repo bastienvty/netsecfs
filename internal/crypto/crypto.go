@@ -1,7 +1,6 @@
 package crypto
 
 import (
-	"crypto"
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
@@ -15,8 +14,6 @@ type Crypto interface {
 	Decrypt(key, ciphertext []byte) ([]byte, error)
 	EncryptRSA(pubKey *rsa.PublicKey, plaintext []byte) ([]byte, error)
 	DecryptRSA(privKey *rsa.PrivateKey, ciphertext []byte) ([]byte, error)
-	Sign(privKey *rsa.PrivateKey, data []byte) ([]byte, error)
-	VerifySign(pubKey *rsa.PublicKey, data, signature []byte) error
 }
 
 type CryptoHelper struct {
@@ -108,18 +105,4 @@ func (c *CryptoHelper) DecryptRSA(privKey *rsa.PrivateKey, ciphertext []byte) ([
 		return nil, err
 	}
 	return decrypted, nil
-}
-
-func (c *CryptoHelper) Sign(privKey *rsa.PrivateKey, data []byte) ([]byte, error) {
-	hash := sha256.New()
-	hash.Write(data)
-	hashSum := hash.Sum(nil)
-	return rsa.SignPSS(rand.Reader, privKey, crypto.SHA256, hashSum, nil)
-}
-
-func (c *CryptoHelper) VerifySign(pubKey *rsa.PublicKey, data, signature []byte) error {
-	hash := sha256.New()
-	hash.Write(data)
-	hashSum := hash.Sum(nil)
-	return rsa.VerifyPSS(pubKey, crypto.SHA256, hashSum, signature, nil)
 }

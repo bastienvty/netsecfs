@@ -148,9 +148,8 @@ type Meta interface {
 	VerifyUser(username string, password []byte, rootKey, privKey *[]byte) error
 	GetSalt(username string, salt *[]byte) error
 	ChangePassword(username string, password, salt, rootKey, privKey []byte) error
-	ShareDir(user uint32, inode Ino, name, key, sign []byte) error
+	ShareDir(user uint32, inode Ino, name, key []byte) error
 	UnshareDir(user uint32, inode Ino) error
-	VerifyShare(user uint32, inode Ino, sign *[]byte) error
 	GetPathKey(inode Ino, keys *[][]byte) error
 }
 

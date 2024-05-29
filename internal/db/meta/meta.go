@@ -77,7 +77,6 @@ type shared struct {
 	Name  []byte `xorm:"unique(edge) varbinary(255) notnull"`
 	User  uint32 `xorm:"notnull"`
 	Key   []byte `xorm:"notnull"`
-	Sign  []byte `xorm:"notnull"`
 }
 
 type dbMeta struct {
@@ -976,7 +975,7 @@ func (m *dbMeta) ChangePassword(username string, password, salt, rootKey, privKe
 	})
 }
 
-func (m *dbMeta) ShareDir(userId uint32, inode Ino, name, key, sign []byte) error {
+func (m *dbMeta) ShareDir(userId uint32, inode Ino, name, key []byte) error {
 	return m.txn(func(s *xorm.Session) error {
 		user := user{Id: userId}
 		exist, err := s.Get(&user)
@@ -986,7 +985,7 @@ func (m *dbMeta) ShareDir(userId uint32, inode Ino, name, key, sign []byte) erro
 		if !exist {
 			return syscall.ENOENT
 		}
-		shared := shared{Inode: inode, Name: name, User: userId, Key: key, Sign: sign}
+		shared := shared{Inode: inode, Name: name, User: userId, Key: key}
 		_, err = s.Insert(shared)
 		return err
 	})
@@ -997,21 +996,6 @@ func (m *dbMeta) UnshareDir(userId uint32, inode Ino) error {
 		shared := shared{Inode: inode, User: userId}
 		_, err := s.Delete(&shared)
 		return err
-	})
-}
-
-func (m *dbMeta) VerifyShare(userId uint32, inode Ino, sign *[]byte) error {
-	return m.roTxn(func(s *xorm.Session) error {
-		shared := shared{Inode: inode, User: userId}
-		exist, err := s.Get(&shared)
-		if err != nil {
-			return err
-		}
-		if !exist {
-			return syscall.ENOENT
-		}
-		*sign = shared.Sign
-		return nil
 	})
 }
 
