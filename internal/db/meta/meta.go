@@ -3,7 +3,7 @@ package meta
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
+	"crypto/sha512"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -891,7 +891,7 @@ func (m *dbMeta) CreateUser(username string, password, salt, rootKey, privKey, p
 		if exist {
 			return syscall.EEXIST
 		}
-		hashRoot := sha256.New()
+		hashRoot := sha512.New()
 		_, err = hashRoot.Write(password)
 		if err != nil {
 			return err
@@ -920,7 +920,7 @@ func (m *dbMeta) VerifyUser(username string, password []byte, rootKey, privKey *
 		if !exist {
 			return syscall.ENOENT
 		}
-		hashRoot := sha256.New()
+		hashRoot := sha512.New()
 		_, err = hashRoot.Write(password)
 		if err != nil {
 			return err
@@ -960,7 +960,7 @@ func (m *dbMeta) ChangePassword(username string, password, salt, rootKey, privKe
 		if !exist {
 			return syscall.ENOENT
 		}
-		hashRoot := sha256.New()
+		hashRoot := sha512.New()
 		_, err = hashRoot.Write(password)
 		if err != nil {
 			return err

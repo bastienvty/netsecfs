@@ -3,7 +3,7 @@ package cli
 import (
 	"crypto/rand"
 	"crypto/rsa"
-	"crypto/sha256"
+	"crypto/sha512"
 	"crypto/x509"
 	"fmt"
 	"os"
@@ -68,8 +68,7 @@ func (u *User) createUser() bool {
 	}
 	masterKey := argon2.IDKey([]byte(u.password), salt, p.iterations, p.memory, p.parallelism, p.keyLength)
 
-	// b64Salt := base64.RawStdEncoding.EncodeToString(salt)
-	hashMaster := sha256.New()
+	hashMaster := sha512.New()
 	_, err = hashMaster.Write(masterKey)
 	if err != nil {
 		return false
@@ -122,7 +121,7 @@ func (u *User) verifyUser() bool {
 	}
 	masterKey := argon2.IDKey([]byte(u.password), salt, p.iterations, p.memory, p.parallelism, p.keyLength)
 
-	hashMaster := sha256.New()
+	hashMaster := sha512.New()
 	_, err = hashMaster.Write(masterKey)
 	if err != nil {
 		return false
@@ -166,7 +165,7 @@ func (u *User) changePassword(newPassword string) bool {
 		return false
 	}
 	newMasterKey := argon2.IDKey([]byte(newPassword), salt, p.iterations, p.memory, p.parallelism, p.keyLength)
-	hashMaster := sha256.New()
+	hashMaster := sha512.New()
 	_, err = hashMaster.Write(newMasterKey)
 	if err != nil {
 		return false

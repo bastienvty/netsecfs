@@ -5,7 +5,7 @@ import (
 	"crypto/cipher"
 	"crypto/rand"
 	"crypto/rsa"
-	"crypto/sha256"
+	"crypto/sha512"
 	"io"
 )
 
@@ -78,7 +78,7 @@ func (c *CryptoHelper) EncryptRSA(pubKey *rsa.PublicKey, plaintext []byte) ([]by
 		return nil, nil
 	}
 	encrypted, err := rsa.EncryptOAEP(
-		sha256.New(),
+		sha512.New(),
 		rand.Reader,
 		pubKey,
 		plaintext,
@@ -95,7 +95,7 @@ func (c *CryptoHelper) DecryptRSA(privKey *rsa.PrivateKey, ciphertext []byte) ([
 		return nil, nil
 	}
 	decrypted, err := rsa.DecryptOAEP(
-		sha256.New(),
+		sha512.New(),
 		rand.Reader,
 		privKey,
 		ciphertext,
