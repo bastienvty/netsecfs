@@ -74,7 +74,7 @@ func startConsole(m meta.Meta, blob object.ObjectStorage, mp string) {
 			}
 			return
 		case "help":
-			fmt.Println("Commands: mount, umount, share, exit")
+			fmt.Println("Commands: signup, login, logout, passwd, mount, umount, share, unshare and exit")
 		case "signup":
 			if isLogged {
 				fmt.Println("User already logged in.")
@@ -141,8 +141,6 @@ func startConsole(m meta.Meta, blob object.ObjectStorage, mp string) {
 				continue
 			}
 			fmt.Println("Password changed successfully.")
-		case "ls":
-			fmt.Println("Not implemented but would list all users.")
 		case "mount":
 			if isMounted {
 				fmt.Println("Already mounted.")

@@ -14,11 +14,8 @@ type File struct {
 }
 
 var _ fs.FileHandle = (*File)(nil)
-
 var _ = (fs.FileReader)((*File)(nil))
-
 var _ = (fs.FileWriter)((*File)(nil))
-
 var _ = (fs.FileFlusher)((*File)(nil))
 var _ = (fs.FileReleaser)((*File)(nil))
 var _ = (fs.FileFsyncer)((*File)(nil))
