@@ -10,7 +10,7 @@ It should work fine both on ARM and x86 architectures. If you encounter any issu
 ## Prerequisites
 
 The application requires the following packages to be installed on the system.
-The version of go should be at least is 1.22.2.
+The version of go has to be at least is 1.22.2.
 
 Follow the official guidelines to install go on your system: [golang.org](https://golang.org/doc/install).
 
@@ -19,7 +19,7 @@ Follow the official guidelines to install go on your system: [golang.org](https:
 Install the following packages:
 
 ```bash
-$ sudo apt install fuse
+$ sudo apt install fuse build-essential libsqlite3-dev
 ```
 
 ### macOS
@@ -38,7 +38,7 @@ $ go build .
 
 ## Usage
 
-Example of how to initialise and mount a file system.
+Example of how to initialise and mount a file system. It is recommended to mount inside `/tmp` to avoid any potential issues.
 
 ```bash
 $ ./netsecfs init --storage data.db --meta meta.db myfs
@@ -55,6 +55,8 @@ netsecfs> mount
 The file system is now mounted at `/tmp/nsfs` as user `test`.
 
 To get a list of all available commands, type `help`.
+
+We recommend to use the [DB Browser for SQLite](https://sqlitebrowser.org/) to inspect the content of the databases. It works on both Ubuntu and macOS.
 
 ## Warning
 
